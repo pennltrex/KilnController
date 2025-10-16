@@ -292,12 +292,12 @@ if __name__ == "__main__":
     # kiln.manual_mode(target_temp=500, duration_minutes=30)
     
     # Simple temperature monitoring
-    print("Monitoring kiln temperature (Ctrl+C to stop)")
+    logging.info("Starting temperature monitoring (Ctrl+C to stop)")
     try:
         while True:
             temp = kiln.read_temperature()
             if temp:
-                print(f"Temperature: {temp:.1f}°C")
+                logging.info(f"Temperature: {temp:.1f}°C")
             time.sleep(2)
     except KeyboardInterrupt:
-        print("\nMonitoring stopped")
+        logging.info("Monitoring stopped")
