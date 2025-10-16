@@ -3,6 +3,7 @@
 Pottery Kiln Controller
 Uses Adafruit MAX31856 thermocouple amplifier and Raspberry Pi
 Implements PID control with firing schedules and safety features
+Web interface for monitoring and control
 """
 
 import board
@@ -13,6 +14,9 @@ import json
 from datetime import datetime
 from simple_pid import PID
 import logging
+import threading
+from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 
 # Setup logging
 logging.basicConfig(
@@ -67,6 +71,12 @@ class KilnController:
         # Data logging
         self.data_log = []
         
+        # Current state for web interface
+        self.current_temp = None
+        self.current_setpoint = 0
+        self.current_output = 0
+        self.state_lock = threading.Lock()
+        
     def read_temperature(self):
         """Read current temperature from thermocouple"""
         try:
@@ -74,6 +84,8 @@ class KilnController:
             if temp is None:
                 logging.error("Failed to read temperature")
                 return None
+            with self.state_lock:
+                self.current_temp = temp
             return temp
         except Exception as e:
             logging.error(f"Error reading temperature: {e}")
@@ -220,6 +232,11 @@ class KilnController:
                 self.pid.setpoint = setpoint
                 control_output = self.pid(current_temp)
                 
+                # Update state for web interface
+                with self.state_lock:
+                    self.current_setpoint = setpoint
+                    self.current_output = control_output
+                
                 # Log data
                 log_entry = {
                     'time': datetime.now().isoformat(),
@@ -251,6 +268,24 @@ class KilnController:
         except Exception as e:
             logging.error(f"Failed to save data log: {e}")
     
+    def get_state(self):
+        """Get current state for web interface"""
+        with self.state_lock:
+            return {
+                'temperature': self.current_temp,
+                'setpoint': self.current_setpoint,
+                'output': self.current_output,
+                'firing_active': self.firing_active,
+                'emergency_stop': self.emergency_stop,
+                'current_segment': self.current_segment,
+                'total_segments': len(self.schedule),
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def get_data_log(self, limit=100):
+        """Get recent data log entries"""
+        return self.data_log[-limit:] if limit else self.data_log
+    
     def manual_mode(self, target_temp, duration_minutes=60):
         """Simple manual control mode"""
         logging.info(f"Starting manual mode: {target_temp}°C for {duration_minutes} minutes")
@@ -280,9 +315,86 @@ class KilnController:
             logging.info("Manual mode ended")
 
 
+# Global kiln controller instance
+kiln = None
+
+# Flask web application
+app = Flask(__name__)
+CORS(app)
+
+@app.route('/')
+def index():
+    """Serve the main dashboard page"""
+    return render_template('dashboard.html')
+
+@app.route('/api/status')
+def get_status():
+    """Get current kiln status"""
+    if kiln:
+        return jsonify(kiln.get_state())
+    return jsonify({'error': 'Kiln not initialized'}), 500
+
+@app.route('/api/data')
+def get_data():
+    """Get historical data"""
+    if kiln:
+        limit = request.args.get('limit', 100, type=int)
+        return jsonify(kiln.get_data_log(limit))
+    return jsonify({'error': 'Kiln not initialized'}), 500
+
+@app.route('/api/schedule', methods=['GET', 'POST'])
+def handle_schedule():
+    """Get or set firing schedule"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+    
+    if request.method == 'POST':
+        schedule = request.json
+        kiln.schedule = schedule
+        logging.info(f"Schedule updated via web interface: {len(schedule)} segments")
+        return jsonify({'success': True})
+    else:
+        return jsonify(kiln.schedule)
+
+@app.route('/api/start', methods=['POST'])
+def start_firing():
+    """Start a firing cycle"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+    
+    if kiln.firing_active:
+        return jsonify({'error': 'Firing already active'}), 400
+    
+    # Start firing in a separate thread
+    firing_thread = threading.Thread(target=kiln.run_firing)
+    firing_thread.daemon = True
+    firing_thread.start()
+    
+    return jsonify({'success': True, 'message': 'Firing started'})
+
+@app.route('/api/stop', methods=['POST'])
+def stop_firing():
+    """Stop the current firing cycle"""
+    if kiln:
+        kiln.firing_active = False
+        kiln.emergency_stop = True
+        return jsonify({'success': True, 'message': 'Firing stopped'})
+    return jsonify({'error': 'Kiln not initialized'}), 500
+
+def start_web_server(port=5000):
+    """Start the Flask web server"""
+    logging.info(f"Starting web server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
+
 if __name__ == "__main__":
-    # Example usage
+    # Initialize kiln controller
     kiln = KilnController(relay_pin=18, max_temp=1300)
+    
+    # Start web server in a separate thread
+    web_thread = threading.Thread(target=start_web_server, args=(5000,))
+    web_thread.daemon = True
+    web_thread.start()
     
     # Example: Load and run a firing schedule
     # kiln.load_schedule('bisque_schedule.json')
@@ -293,6 +405,7 @@ if __name__ == "__main__":
     
     # Simple temperature monitoring
     logging.info("Starting temperature monitoring (Ctrl+C to stop)")
+    logging.info("Web interface available at http://[your-pi-ip]:5000")
     try:
         while True:
             temp = kiln.read_temperature()
