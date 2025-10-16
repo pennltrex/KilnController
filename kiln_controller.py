@@ -156,6 +156,55 @@ class KilnController:
             logging.error(f"Failed to load schedule: {e}")
             return False
     
+    def save_schedule(self, schedule_name, schedule_data):
+        """Save a firing schedule to file"""
+        try:
+            filename = f"schedules/{schedule_name}.json"
+            import os
+            os.makedirs('schedules', exist_ok=True)
+            with open(filename, 'w') as f:
+                json.dump(schedule_data, f, indent=2)
+            logging.info(f"Saved schedule: {schedule_name}")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to save schedule: {e}")
+            return False
+    
+    def list_schedules(self):
+        """List all available firing schedules"""
+        try:
+            import os
+            os.makedirs('schedules', exist_ok=True)
+            schedules = []
+            for filename in os.listdir('schedules'):
+                if filename.endswith('.json'):
+                    name = filename[:-5]  # Remove .json extension
+                    with open(f"schedules/{filename}", 'r') as f:
+                        data = json.load(f)
+                    schedules.append({
+                        'name': name,
+                        'segments': len(data),
+                        'max_temp': max([seg['target'] for seg in data]) if data else 0
+                    })
+            return schedules
+        except Exception as e:
+            logging.error(f"Failed to list schedules: {e}")
+            return []
+    
+    def delete_schedule(self, schedule_name):
+        """Delete a firing schedule"""
+        try:
+            import os
+            filename = f"schedules/{schedule_name}.json"
+            if os.path.exists(filename):
+                os.remove(filename)
+                logging.info(f"Deleted schedule: {schedule_name}")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"Failed to delete schedule: {e}")
+            return False
+    
     def calculate_setpoint(self, current_temp, elapsed_time):
         """
         Calculate current setpoint based on firing schedule
@@ -341,6 +390,49 @@ def get_data():
         limit = request.args.get('limit', 100, type=int)
         return jsonify(kiln.get_data_log(limit))
     return jsonify({'error': 'Kiln not initialized'}), 500
+
+@app.route('/api/schedules', methods=['GET'])
+def list_schedules():
+    """List all available schedules"""
+    if kiln:
+        schedules = kiln.list_schedules()
+        return jsonify(schedules)
+    return jsonify({'error': 'Kiln not initialized'}), 500
+
+@app.route('/api/schedules/<name>', methods=['GET', 'POST', 'DELETE'])
+def manage_schedule(name):
+    """Get, save, or delete a specific schedule"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+    
+    if request.method == 'GET':
+        try:
+            with open(f"schedules/{name}.json", 'r') as f:
+                schedule = json.load(f)
+            return jsonify(schedule)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 404
+    
+    elif request.method == 'POST':
+        schedule_data = request.json
+        if kiln.save_schedule(name, schedule_data):
+            return jsonify({'success': True, 'message': f'Schedule {name} saved'})
+        return jsonify({'error': 'Failed to save schedule'}), 500
+    
+    elif request.method == 'DELETE':
+        if kiln.delete_schedule(name):
+            return jsonify({'success': True, 'message': f'Schedule {name} deleted'})
+        return jsonify({'error': 'Failed to delete schedule'}), 500
+
+@app.route('/api/load-schedule/<name>', methods=['POST'])
+def load_schedule_endpoint(name):
+    """Load a schedule as the active schedule"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+    
+    if kiln.load_schedule(f"schedules/{name}.json"):
+        return jsonify({'success': True, 'message': f'Schedule {name} loaded'})
+    return jsonify({'error': 'Failed to load schedule'}), 500
 
 @app.route('/api/schedule', methods=['GET', 'POST'])
 def handle_schedule():

@@ -139,6 +139,117 @@
             margin-top: 15px;
             flex-wrap: wrap;
         }
+        
+        .schedule-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 15px 0;
+        }
+        
+        .schedule-item {
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .schedule-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+        
+        .schedule-item.selected {
+            background: #e0e7ff;
+            border-left: 4px solid #667eea;
+        }
+        
+        .schedule-info {
+            flex: 1;
+        }
+        
+        .schedule-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .schedule-details {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .schedule-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            min-width: auto;
+        }
+        
+        .segment-editor {
+            margin: 15px 0;
+        }
+        
+        .segment-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .input-group label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        
+        .input-group input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        
+        .btn-remove {
+            background: #ef4444;
+            color: white;
+            padding: 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        
+        .btn-remove:hover {
+            background: #dc2626;
+        }
+        
+        select {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            margin: 10px 0;
+            width: 100%;
+            background: white;
+        }
 
         button {
             flex: 1;
@@ -273,8 +384,14 @@
 
             <div class="card">
                 <h2>Controls</h2>
+                <div class="input-group">
+                    <label>Select Firing Schedule:</label>
+                    <select id="schedule-select">
+                        <option value="">-- No schedule loaded --</option>
+                    </select>
+                </div>
                 <div class="controls">
-                    <button class="btn-primary" id="start-btn" onclick="startFiring()">
+                    <button class="btn-primary" id="start-btn" onclick="startFiring()" disabled>
                         Start Firing
                     </button>
                     <button class="btn-danger" id="stop-btn" onclick="stopFiring()" disabled>
@@ -282,8 +399,42 @@
                     </button>
                 </div>
                 <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
-                    ⚠️ Ensure firing schedule is loaded before starting
+                    ⚠️ Select a schedule before starting
                 </p>
+            </div>
+
+            <div class="card">
+                <h2>Firing Schedules</h2>
+                <div class="schedule-list" id="schedule-list">
+                    <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
+                </div>
+                <div class="controls">
+                    <button class="btn-primary" onclick="showScheduleEditor()">
+                        Create New Schedule
+                    </button>
+                </div>
+            </div>
+
+            <div class="card" id="schedule-editor" style="display: none;">
+                <h2>Schedule Editor</h2>
+                <div class="input-group">
+                    <label>Schedule Name:</label>
+                    <input type="text" id="schedule-name" placeholder="e.g., Bisque Cone 04">
+                </div>
+                <div class="segment-editor" id="segment-editor">
+                    <!-- Segments will be added here -->
+                </div>
+                <div class="controls">
+                    <button class="btn-primary" onclick="addSegment()">
+                        Add Segment
+                    </button>
+                    <button class="btn-primary" onclick="saveSchedule()">
+                        Save Schedule
+                    </button>
+                    <button class="btn-danger btn-small" onclick="cancelEdit()">
+                        Cancel
+                    </button>
+                </div>
             </div>
 
             <div class="card chart-card">
@@ -350,6 +501,8 @@
         });
 
         const maxDataPoints = 100;
+        let currentScheduleName = '';
+        let editingSchedule = false;
 
         function updateChart(timestamp, temp, setpoint) {
             const time = new Date(timestamp).toLocaleTimeString();
@@ -377,6 +530,215 @@
                 alert.style.display = 'none';
             }, 5000);
         }
+
+        async function loadScheduleList() {
+            try {
+                const response = await fetch('/api/schedules');
+                const schedules = await response.json();
+                
+                const listEl = document.getElementById('schedule-list');
+                const selectEl = document.getElementById('schedule-select');
+                
+                if (schedules.length === 0) {
+                    listEl.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No schedules found. Create one to get started!</p>';
+                    selectEl.innerHTML = '<option value="">-- No schedules available --</option>';
+                    return;
+                }
+                
+                listEl.innerHTML = '';
+                selectEl.innerHTML = '<option value="">-- Select a schedule --</option>';
+                
+                schedules.forEach(schedule => {
+                    // Add to list
+                    const item = document.createElement('div');
+                    item.className = 'schedule-item';
+                    item.innerHTML = `
+                        <div class="schedule-info">
+                            <div class="schedule-name">${schedule.name}</div>
+                            <div class="schedule-details">${schedule.segments} segments • Max: ${schedule.max_temp}°C</div>
+                        </div>
+                        <div class="schedule-actions">
+                            <button class="btn-primary btn-small" onclick="loadSchedule('${schedule.name}')">Load</button>
+                            <button class="btn-primary btn-small" onclick="editSchedule('${schedule.name}')">Edit</button>
+                            <button class="btn-danger btn-small" onclick="deleteSchedule('${schedule.name}')">Delete</button>
+                        </div>
+                    `;
+                    listEl.appendChild(item);
+                    
+                    // Add to select
+                    const option = document.createElement('option');
+                    option.value = schedule.name;
+                    option.textContent = `${schedule.name} (${schedule.segments} segments, ${schedule.max_temp}°C)`;
+                    selectEl.appendChild(option);
+                });
+                
+            } catch (error) {
+                console.error('Error loading schedules:', error);
+                showAlert('Failed to load schedules', 'error');
+            }
+        }
+
+        async function loadSchedule(name) {
+            try {
+                const response = await fetch(`/api/load-schedule/${name}`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentScheduleName = name;
+                    document.getElementById('schedule-select').value = name;
+                    document.getElementById('start-btn').disabled = false;
+                    showAlert(`Schedule "${name}" loaded successfully`, 'success');
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to load schedule: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteSchedule(name) {
+            if (!confirm(`Are you sure you want to delete the schedule "${name}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/schedules/${name}`, { method: 'DELETE' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`Schedule "${name}" deleted`, 'success');
+                    loadScheduleList();
+                    if (currentScheduleName === name) {
+                        currentScheduleName = '';
+                        document.getElementById('schedule-select').value = '';
+                        document.getElementById('start-btn').disabled = true;
+                    }
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to delete schedule: ' + error.message, 'error');
+            }
+        }
+
+        async function editSchedule(name) {
+            try {
+                const response = await fetch(`/api/schedules/${name}`);
+                const schedule = await response.json();
+                
+                document.getElementById('schedule-name').value = name;
+                document.getElementById('segment-editor').innerHTML = '';
+                
+                schedule.forEach((segment, index) => {
+                    addSegment(segment);
+                });
+                
+                editingSchedule = true;
+                document.getElementById('schedule-editor').style.display = 'block';
+                document.getElementById('schedule-editor').scrollIntoView({ behavior: 'smooth' });
+                
+            } catch (error) {
+                showAlert('Failed to load schedule for editing: ' + error.message, 'error');
+            }
+        }
+
+        function showScheduleEditor() {
+            document.getElementById('schedule-name').value = '';
+            document.getElementById('segment-editor').innerHTML = '';
+            addSegment();
+            editingSchedule = false;
+            document.getElementById('schedule-editor').style.display = 'block';
+            document.getElementById('schedule-editor').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            document.getElementById('schedule-editor').style.display = 'none';
+        }
+
+        let segmentCounter = 0;
+
+        function addSegment(data = null) {
+            const editor = document.getElementById('segment-editor');
+            const segmentId = `segment-${segmentCounter++}`;
+            
+            const segment = document.createElement('div');
+            segment.className = 'segment-item';
+            segment.id = segmentId;
+            segment.innerHTML = `
+                <div class="input-group">
+                    <label>Rate (°C/hr):</label>
+                    <input type="number" class="segment-rate" value="${data?.rate || 100}" min="1" max="500">
+                </div>
+                <div class="input-group">
+                    <label>Target (°C):</label>
+                    <input type="number" class="segment-target" value="${data?.target || 600}" min="0" max="1500">
+                </div>
+                <div class="input-group">
+                    <label>Hold (min):</label>
+                    <input type="number" class="segment-hold" value="${data?.hold || 0}" min="0" max="999">
+                </div>
+                <button class="btn-remove" onclick="removeSegment('${segmentId}')">Remove</button>
+            `;
+            editor.appendChild(segment);
+        }
+
+        function removeSegment(segmentId) {
+            document.getElementById(segmentId).remove();
+        }
+
+        async function saveSchedule() {
+            const name = document.getElementById('schedule-name').value.trim();
+            if (!name) {
+                showAlert('Please enter a schedule name', 'error');
+                return;
+            }
+            
+            const segments = [];
+            const segmentItems = document.querySelectorAll('.segment-item');
+            
+            if (segmentItems.length === 0) {
+                showAlert('Please add at least one segment', 'error');
+                return;
+            }
+            
+            segmentItems.forEach(item => {
+                const rate = parseFloat(item.querySelector('.segment-rate').value);
+                const target = parseFloat(item.querySelector('.segment-target').value);
+                const hold = parseFloat(item.querySelector('.segment-hold').value);
+                segments.push({ rate, target, hold });
+            });
+            
+            try {
+                const response = await fetch(`/api/schedules/${name}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(segments)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`Schedule "${name}" saved successfully`, 'success');
+                    cancelEdit();
+                    loadScheduleList();
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to save schedule: ' + error.message, 'error');
+            }
+        }
+
+        // Handle schedule selection from dropdown
+        document.getElementById('schedule-select').addEventListener('change', function(e) {
+            const name = e.target.value;
+            if (name) {
+                loadSchedule(name);
+            } else {
+                currentScheduleName = '';
+                document.getElementById('start-btn').disabled = true;
+            }
+        });
 
         async function updateStatus() {
             try {
@@ -409,7 +771,7 @@
                 } else {
                     statusIndicator.className = 'status-indicator inactive';
                     statusText.textContent = 'Idle';
-                    startBtn.disabled = false;
+                    startBtn.disabled = !currentScheduleName;
                     stopBtn.disabled = true;
                 }
                 
@@ -428,7 +790,12 @@
         }
 
         async function startFiring() {
-            if (!confirm('Are you sure you want to start the firing cycle?')) {
+            if (!currentScheduleName) {
+                showAlert('Please select a schedule first', 'error');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to start firing with schedule "${currentScheduleName}"?`)) {
                 return;
             }
             
@@ -465,7 +832,8 @@
             }
         }
 
-        // Update status every 2 seconds
+        // Initialize
+        loadScheduleList();
         updateStatus();
         setInterval(updateStatus, 2000);
     </script>
