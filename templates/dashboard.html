@@ -124,7 +124,13 @@
 
         .chart-card {
             grid-column: 1 / -1;
-            min-height: 400px;
+            height: 450px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 350px;
+            width: 100%;
         }
 
         .controls {
@@ -282,7 +288,9 @@
 
             <div class="card chart-card">
                 <h2>Temperature History</h2>
-                <canvas id="tempChart"></canvas>
+                <div class="chart-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
