@@ -557,15 +557,13 @@
         let loadedScheduleData = null;
         let scheduleMaxTemp = 0;
         let scheduleTotalMinutes = 0;
-        let chartTimeInterval = 10; // minutes between x-axis points
+        let chartTimeInterval = 10;
 
         function initializeChartForSchedule(schedule) {
             if (!schedule || schedule.length === 0) return;
             
-            // Calculate max temp and total time
             scheduleMaxTemp = Math.max(...schedule.map(s => s.target));
             scheduleTotalMinutes = 0;
-            let currentTemp = 20; // Assume room temp start
             
             schedule.forEach((segment, index) => {
                 const startTemp = index === 0 ? 20 : schedule[index - 1].target;
@@ -573,14 +571,11 @@
                 scheduleTotalMinutes += rampTime + segment.hold;
             });
             
-            // Add 10% padding
             scheduleMaxTemp = Math.ceil(scheduleMaxTemp * 1.1);
             scheduleTotalMinutes = Math.ceil(scheduleTotalMinutes * 1.1);
             
-            // Determine time interval (aim for ~20-30 points on x-axis)
             chartTimeInterval = Math.ceil(scheduleTotalMinutes / 25);
             
-            // Generate x-axis labels
             chart.data.labels = [];
             for (let i = 0; i <= scheduleTotalMinutes; i += chartTimeInterval) {
                 const hours = Math.floor(i / 60);
@@ -588,11 +583,9 @@
                 chart.data.labels.push(hours > 0 ? `${hours}h ${mins}m` : `${mins}m`);
             }
             
-            // Initialize empty data arrays
             chart.data.datasets[0].data = new Array(chart.data.labels.length).fill(null);
             chart.data.datasets[1].data = new Array(chart.data.labels.length).fill(null);
             
-            // Pre-calculate the scheduled line
             chart.data.datasets[2].data = [];
             for (let i = 0; i < chart.data.labels.length; i++) {
                 const elapsedMinutes = i * chartTimeInterval;
@@ -600,7 +593,6 @@
                 chart.data.datasets[2].data.push(scheduledTemp);
             }
             
-            // Update chart scales
             chart.options.scales.y.min = 0;
             chart.options.scales.y.max = scheduleMaxTemp;
             
@@ -608,6 +600,8 @@
             
             console.log(`Chart initialized: ${scheduleTotalMinutes} minutes, ${scheduleMaxTemp}°C max, ${chartTimeInterval}min intervals`);
         }
+        
+        function calculateScheduledTemp(elapsedMinutes, schedule, startTemp) {
             if (!schedule || schedule.length === 0) return null;
             
             let currentTime = 0;
@@ -615,15 +609,13 @@
             
             for (let i = 0; i < schedule.length; i++) {
                 const segment = schedule[i];
-                const rate = segment.rate / 60; // Convert to °C per minute
+                const rate = segment.rate / 60;
                 const target = segment.target;
                 const hold = segment.hold;
                 
-                // Calculate ramp time
                 const tempDiff = target - currentTemp;
                 const rampTime = Math.abs(tempDiff) / rate;
                 
-                // Check if we're in this segment's ramp phase
                 if (elapsedMinutes < currentTime + rampTime) {
                     const segmentElapsed = elapsedMinutes - currentTime;
                     return currentTemp + (rate * segmentElapsed * Math.sign(tempDiff));
@@ -632,7 +624,6 @@
                 currentTime += rampTime;
                 currentTemp = target;
                 
-                // Check if we're in this segment's hold phase
                 if (elapsedMinutes < currentTime + hold) {
                     return target;
                 }
@@ -640,24 +631,19 @@
                 currentTime += hold;
             }
             
-            // After schedule completes, maintain final temperature
             return currentTemp;
         }
-
+        
         function updateChart(timestamp, temp, setpoint) {
-            // If no schedule loaded or not firing, don't update
             if (!scheduleStartTime || !loadedScheduleData) {
                 return;
             }
             
-            // Calculate elapsed time
             const elapsedMs = new Date(timestamp) - scheduleStartTime;
             const elapsedMinutes = elapsedMs / (1000 * 60);
             
-            // Find the closest index for this time point
             const index = Math.round(elapsedMinutes / chartTimeInterval);
             
-            // If we're beyond the chart range, expand it
             if (index >= chart.data.labels.length) {
                 const newMinutes = (index + 1) * chartTimeInterval;
                 const hours = Math.floor(newMinutes / 60);
@@ -666,51 +652,22 @@
                 chart.data.datasets[0].data.push(null);
                 chart.data.datasets[1].data.push(null);
                 
-                // Extend scheduled line
                 const scheduledTemp = calculateScheduledTemp(newMinutes, loadedScheduleData, scheduleStartTemp);
                 chart.data.datasets[2].data.push(scheduledTemp);
                 
                 scheduleTotalMinutes = newMinutes;
             }
             
-            // Update data at the correct index
             if (index >= 0 && index < chart.data.labels.length) {
                 chart.data.datasets[0].data[index] = temp;
                 chart.data.datasets[1].data[index] = setpoint;
             }
             
-            // Expand Y-axis if needed
             if (temp > chart.options.scales.y.max) {
                 chart.options.scales.y.max = Math.ceil(temp * 1.1);
             }
             if (setpoint > chart.options.scales.y.max) {
                 chart.options.scales.y.max = Math.ceil(setpoint * 1.1);
-            }
-            
-            chart.update('none');
-        }
-            const time = new Date(timestamp).toLocaleTimeString();
-            
-            chart.data.labels.push(time);
-            chart.data.datasets[0].data.push(temp);
-            chart.data.datasets[1].data.push(setpoint);
-            
-            // Calculate scheduled temperature
-            let scheduledTemp = null;
-            if (loadedScheduleData && scheduleStartTime && scheduleStartTemp !== null) {
-                const elapsedMs = new Date(timestamp) - scheduleStartTime;
-                const elapsedMinutes = elapsedMs / (1000 * 60);
-                scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
-                console.log(`Scheduled calc: elapsed=${elapsedMinutes.toFixed(1)}min, start=${scheduleStartTemp}°C, scheduled=${scheduledTemp?.toFixed(1)}°C`);
-            }
-            chart.data.datasets[2].data.push(scheduledTemp);
-            
-            // Keep only the last maxDataPoints
-            if (chart.data.labels.length > maxDataPoints) {
-                chart.data.labels.shift();
-                chart.data.datasets[0].data.shift();
-                chart.data.datasets[1].data.shift();
-                chart.data.datasets[2].data.shift();
             }
             
             chart.update('none');
@@ -744,7 +701,6 @@
                 selectEl.innerHTML = '<option value="">-- Select a schedule --</option>';
                 
                 schedules.forEach(schedule => {
-                    // Add to list
                     const item = document.createElement('div');
                     item.className = 'schedule-item';
                     item.innerHTML = `
@@ -760,7 +716,6 @@
                     `;
                     listEl.appendChild(item);
                     
-                    // Add to select
                     const option = document.createElement('option');
                     option.value = schedule.name;
                     option.textContent = `${schedule.name} (${schedule.segments} segments, ${schedule.max_temp}°C)`;
@@ -775,15 +730,12 @@
 
         async function loadSchedule(name) {
             try {
-                // First load the schedule data
                 const scheduleResponse = await fetch(`/api/schedules/${name}`);
                 const schedule = await scheduleResponse.json();
                 loadedScheduleData = schedule;
                 
-                // Initialize the chart with this schedule
                 initializeChartForSchedule(schedule);
                 
-                // Then activate it
                 const response = await fetch(`/api/load-schedule/${name}`, { method: 'POST' });
                 const data = await response.json();
                 
@@ -792,7 +744,6 @@
                     document.getElementById('schedule-select').value = name;
                     document.getElementById('start-btn').disabled = false;
                     
-                    // Load and display schedule details
                     await displayScheduleSummary(name);
                     
                     showAlert(`Schedule "${name}" loaded successfully`, 'success');
@@ -801,52 +752,6 @@
                 }
             } catch (error) {
                 showAlert('Failed to load schedule: ' + error.message, 'error');
-            }
-        }
-
-        async function displayScheduleSummary(name) {
-            try {
-                const response = await fetch(`/api/schedules/${name}`);
-                const schedule = await response.json();
-                
-                document.getElementById('active-schedule-name').textContent = name;
-                
-                // Calculate total time and create summary
-                let totalTime = 0;
-                let summaryHTML = '<div style="margin-top: 10px;">';
-                
-                schedule.forEach((segment, index) => {
-                    const startTemp = index === 0 ? 20 : schedule[index - 1].target;
-                    const rampTime = Math.abs(segment.target - startTemp) / segment.rate * 60; // minutes
-                    const totalSegmentTime = rampTime + segment.hold;
-                    totalTime += totalSegmentTime;
-                    
-                    summaryHTML += `
-                        <div class="schedule-segment-item">
-                            <div class="segment-title">Segment ${index + 1}</div>
-                            <div class="segment-details">
-                                Rate: ${segment.rate}°C/hr → Target: ${segment.target}°C
-                                ${segment.hold > 0 ? ` → Hold: ${segment.hold} min` : ''}
-                            </div>
-                            <div class="segment-time">
-                                Est. time: ${Math.round(totalSegmentTime)} minutes
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                summaryHTML += `
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #ddd; font-weight: bold; color: #333;">
-                        Total estimated time: ${Math.round(totalTime)} minutes (${(totalTime / 60).toFixed(1)} hours)
-                    </div>
-                `;
-                summaryHTML += '</div>';
-                
-                document.getElementById('active-schedule-summary').innerHTML = summaryHTML;
-                
-            } catch (error) {
-                console.error('Failed to load schedule summary:', error);
-                document.getElementById('active-schedule-summary').textContent = 'Error loading schedule details';
             }
         }
 
@@ -983,7 +888,51 @@
             }
         }
 
-        // Handle schedule selection from dropdown
+        async function displayScheduleSummary(name) {
+            try {
+                const response = await fetch(`/api/schedules/${name}`);
+                const schedule = await response.json();
+                
+                document.getElementById('active-schedule-name').textContent = name;
+                
+                let totalTime = 0;
+                let summaryHTML = '<div style="margin-top: 10px;">';
+                
+                schedule.forEach((segment, index) => {
+                    const startTemp = index === 0 ? 20 : schedule[index - 1].target;
+                    const rampTime = Math.abs(segment.target - startTemp) / segment.rate * 60;
+                    const totalSegmentTime = rampTime + segment.hold;
+                    totalTime += totalSegmentTime;
+                    
+                    summaryHTML += `
+                        <div class="schedule-segment-item">
+                            <div class="segment-title">Segment ${index + 1}</div>
+                            <div class="segment-details">
+                                Rate: ${segment.rate}°C/hr → Target: ${segment.target}°C
+                                ${segment.hold > 0 ? ` → Hold: ${segment.hold} min` : ''}
+                            </div>
+                            <div class="segment-time">
+                                Est. time: ${Math.round(totalSegmentTime)} minutes
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                summaryHTML += `
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #ddd; font-weight: bold; color: #333;">
+                        Total estimated time: ${Math.round(totalTime)} minutes (${(totalTime / 60).toFixed(1)} hours)
+                    </div>
+                `;
+                summaryHTML += '</div>';
+                
+                document.getElementById('active-schedule-summary').innerHTML = summaryHTML;
+                
+            } catch (error) {
+                console.error('Failed to load schedule summary:', error);
+                document.getElementById('active-schedule-summary').textContent = 'Error loading schedule details';
+            }
+        }
+
         document.getElementById('schedule-select').addEventListener('change', function(e) {
             const name = e.target.value;
             if (name) {
@@ -996,7 +945,6 @@
                 scheduleMaxTemp = 0;
                 scheduleTotalMinutes = 0;
                 
-                // Clear chart
                 chart.data.labels = [];
                 chart.data.datasets[0].data = [];
                 chart.data.datasets[1].data = [];
@@ -1016,15 +964,12 @@
                 const response = await fetch('/api/status');
                 const data = await response.json();
                 
-                // Get status indicator element
                 const statusIndicator = document.getElementById('status-indicator');
                 
-                // Detect firing start to capture schedule start conditions
                 const wasFiring = statusIndicator && statusIndicator.classList.contains('active');
                 const isFiring = data.firing_active && !data.emergency_stop;
                 
                 if (isFiring && !wasFiring && loadedScheduleData) {
-                    // Firing just started - capture start conditions
                     scheduleStartTime = new Date(data.timestamp);
                     scheduleStartTemp = data.temperature;
                     console.log('🔥 Firing started!');
@@ -1032,7 +977,6 @@
                     console.log('   Schedule base time:', scheduleStartTime);
                     console.log('   Loaded schedule:', loadedScheduleData);
                     
-                    // Recalculate the scheduled line with actual start temp
                     for (let i = 0; i < chart.data.labels.length; i++) {
                         const elapsedMinutes = i * chartTimeInterval;
                         const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
@@ -1042,20 +986,17 @@
                 }
                 
                 if (!isFiring && wasFiring) {
-                    // Firing stopped - reset timing but keep the data
                     scheduleStartTime = null;
                     scheduleStartTemp = null;
                     console.log('Firing stopped');
                 }
                 
-                // Update temperature display
                 const temp = data.temperature !== null ? data.temperature.toFixed(1) : '--';
                 document.getElementById('current-temp').textContent = temp;
                 document.getElementById('setpoint').textContent = data.setpoint.toFixed(1);
                 document.getElementById('output').textContent = data.output.toFixed(1);
                 document.getElementById('output-bar').style.width = data.output + '%';
                 
-                // Update status
                 const statusText = document.getElementById('firing-status');
                 const startBtn = document.getElementById('start-btn');
                 const stopBtn = document.getElementById('stop-btn');
@@ -1081,7 +1022,6 @@
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
                 
-                // Update chart only if firing is active
                 if (data.temperature !== null && isFiring) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
                 }
@@ -1134,7 +1074,6 @@
             }
         }
 
-        // Initialize
         loadScheduleList();
         updateStatus();
         setInterval(updateStatus, 2000);
