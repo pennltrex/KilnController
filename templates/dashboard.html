@@ -209,6 +209,30 @@
             align-items: center;
         }
         
+        .schedule-segment-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        
+        .schedule-segment-item .segment-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 4px;
+        }
+        
+        .schedule-segment-item .segment-details {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .schedule-segment-item .segment-time {
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 2px;
+        }
+        
         .input-group {
             display: flex;
             flex-direction: column;
@@ -476,6 +500,16 @@
                     borderDash: [5, 5],
                     tension: 0.4,
                     fill: false
+                }, {
+                    label: 'Scheduled',
+                    data: [],
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    borderDash: [10, 5],
+                    tension: 0,
+                    fill: false,
+                    pointRadius: 0
                 }]
             },
             options: {
@@ -509,6 +543,46 @@
         const maxDataPoints = 100;
         let currentScheduleName = '';
         let editingSchedule = false;
+        let scheduleStartTime = null;
+        let scheduleStartTemp = null;
+        let loadedScheduleData = null;
+
+        function calculateScheduledTemp(elapsedMinutes, schedule, startTemp) {
+            if (!schedule || schedule.length === 0) return null;
+            
+            let currentTime = 0;
+            let currentTemp = startTemp;
+            
+            for (let i = 0; i < schedule.length; i++) {
+                const segment = schedule[i];
+                const rate = segment.rate / 60; // Convert to °C per minute
+                const target = segment.target;
+                const hold = segment.hold;
+                
+                // Calculate ramp time
+                const tempDiff = target - currentTemp;
+                const rampTime = Math.abs(tempDiff) / rate;
+                
+                // Check if we're in this segment's ramp phase
+                if (elapsedMinutes < currentTime + rampTime) {
+                    const segmentElapsed = elapsedMinutes - currentTime;
+                    return currentTemp + (rate * segmentElapsed * Math.sign(tempDiff));
+                }
+                
+                currentTime += rampTime;
+                currentTemp = target;
+                
+                // Check if we're in this segment's hold phase
+                if (elapsedMinutes < currentTime + hold) {
+                    return target;
+                }
+                
+                currentTime += hold;
+            }
+            
+            // After schedule completes, maintain final temperature
+            return currentTemp;
+        }
 
         function updateChart(timestamp, temp, setpoint) {
             const time = new Date(timestamp).toLocaleTimeString();
@@ -517,11 +591,21 @@
             chart.data.datasets[0].data.push(temp);
             chart.data.datasets[1].data.push(setpoint);
             
+            // Calculate scheduled temperature
+            let scheduledTemp = null;
+            if (loadedScheduleData && scheduleStartTime && scheduleStartTemp !== null) {
+                const elapsedMs = new Date(timestamp) - scheduleStartTime;
+                const elapsedMinutes = elapsedMs / (1000 * 60);
+                scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
+            }
+            chart.data.datasets[2].data.push(scheduledTemp);
+            
             // Keep only the last maxDataPoints
             if (chart.data.labels.length > maxDataPoints) {
                 chart.data.labels.shift();
                 chart.data.datasets[0].data.shift();
                 chart.data.datasets[1].data.shift();
+                chart.data.datasets[2].data.shift();
             }
             
             chart.update('none');
@@ -586,6 +670,12 @@
 
         async function loadSchedule(name) {
             try {
+                // First load the schedule data
+                const scheduleResponse = await fetch(`/api/schedules/${name}`);
+                const schedule = await scheduleResponse.json();
+                loadedScheduleData = schedule;
+                
+                // Then activate it
                 const response = await fetch(`/api/load-schedule/${name}`, { method: 'POST' });
                 const data = await response.json();
                 
@@ -624,15 +714,13 @@
                     totalTime += totalSegmentTime;
                     
                     summaryHTML += `
-                        <div class="segment-item" style="margin-bottom: 8px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
-                            <div style="font-weight: bold; color: #667eea; margin-bottom: 4px;">
-                                Segment ${index + 1}
-                            </div>
-                            <div style="font-size: 0.9em; color: #666;">
+                        <div class="schedule-segment-item">
+                            <div class="segment-title">Segment ${index + 1}</div>
+                            <div class="segment-details">
                                 Rate: ${segment.rate}°C/hr → Target: ${segment.target}°C
                                 ${segment.hold > 0 ? ` → Hold: ${segment.hold} min` : ''}
                             </div>
-                            <div style="font-size: 0.85em; color: #999; margin-top: 2px;">
+                            <div class="segment-time">
                                 Est. time: ${Math.round(totalSegmentTime)} minutes
                             </div>
                         </div>
@@ -795,6 +883,8 @@
             } else {
                 currentScheduleName = '';
                 document.getElementById('start-btn').disabled = true;
+                document.getElementById('active-schedule-name').textContent = 'No schedule loaded';
+                document.getElementById('active-schedule-summary').textContent = 'Select a schedule from the controls section to begin';
             }
         });
 
