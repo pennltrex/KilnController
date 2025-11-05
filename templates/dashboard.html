@@ -490,7 +490,8 @@
                     backgroundColor: 'rgba(118, 75, 162, 0.1)',
                     borderWidth: 2,
                     tension: 0.4,
-                    fill: true
+                    fill: true,
+                    spanGaps: true
                 }, {
                     label: 'Setpoint',
                     data: [],
@@ -499,17 +500,20 @@
                     borderWidth: 2,
                     borderDash: [5, 5],
                     tension: 0.4,
-                    fill: false
+                    fill: false,
+                    spanGaps: true
                 }, {
                     label: 'Scheduled',
                     data: [],
                     borderColor: '#10b981',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    borderWidth: 2,
+                    borderWidth: 3,
                     borderDash: [10, 5],
                     tension: 0,
                     fill: false,
-                    pointRadius: 0
+                    pointRadius: 2,
+                    pointBackgroundColor: '#10b981',
+                    spanGaps: false
                 }]
             },
             options: {
@@ -551,8 +555,59 @@
         let scheduleStartTime = null;
         let scheduleStartTemp = null;
         let loadedScheduleData = null;
+        let scheduleMaxTemp = 0;
+        let scheduleTotalMinutes = 0;
+        let chartTimeInterval = 10; // minutes between x-axis points
 
-        function calculateScheduledTemp(elapsedMinutes, schedule, startTemp) {
+        function initializeChartForSchedule(schedule) {
+            if (!schedule || schedule.length === 0) return;
+            
+            // Calculate max temp and total time
+            scheduleMaxTemp = Math.max(...schedule.map(s => s.target));
+            scheduleTotalMinutes = 0;
+            let currentTemp = 20; // Assume room temp start
+            
+            schedule.forEach((segment, index) => {
+                const startTemp = index === 0 ? 20 : schedule[index - 1].target;
+                const rampTime = Math.abs(segment.target - startTemp) / segment.rate * 60;
+                scheduleTotalMinutes += rampTime + segment.hold;
+            });
+            
+            // Add 10% padding
+            scheduleMaxTemp = Math.ceil(scheduleMaxTemp * 1.1);
+            scheduleTotalMinutes = Math.ceil(scheduleTotalMinutes * 1.1);
+            
+            // Determine time interval (aim for ~20-30 points on x-axis)
+            chartTimeInterval = Math.ceil(scheduleTotalMinutes / 25);
+            
+            // Generate x-axis labels
+            chart.data.labels = [];
+            for (let i = 0; i <= scheduleTotalMinutes; i += chartTimeInterval) {
+                const hours = Math.floor(i / 60);
+                const mins = i % 60;
+                chart.data.labels.push(hours > 0 ? `${hours}h ${mins}m` : `${mins}m`);
+            }
+            
+            // Initialize empty data arrays
+            chart.data.datasets[0].data = new Array(chart.data.labels.length).fill(null);
+            chart.data.datasets[1].data = new Array(chart.data.labels.length).fill(null);
+            
+            // Pre-calculate the scheduled line
+            chart.data.datasets[2].data = [];
+            for (let i = 0; i < chart.data.labels.length; i++) {
+                const elapsedMinutes = i * chartTimeInterval;
+                const scheduledTemp = calculateScheduledTemp(elapsedMinutes, schedule, 20);
+                chart.data.datasets[2].data.push(scheduledTemp);
+            }
+            
+            // Update chart scales
+            chart.options.scales.y.min = 0;
+            chart.options.scales.y.max = scheduleMaxTemp;
+            
+            chart.update();
+            
+            console.log(`Chart initialized: ${scheduleTotalMinutes} minutes, ${scheduleMaxTemp}°C max, ${chartTimeInterval}min intervals`);
+        }
             if (!schedule || schedule.length === 0) return null;
             
             let currentTime = 0;
@@ -590,6 +645,50 @@
         }
 
         function updateChart(timestamp, temp, setpoint) {
+            // If no schedule loaded or not firing, don't update
+            if (!scheduleStartTime || !loadedScheduleData) {
+                return;
+            }
+            
+            // Calculate elapsed time
+            const elapsedMs = new Date(timestamp) - scheduleStartTime;
+            const elapsedMinutes = elapsedMs / (1000 * 60);
+            
+            // Find the closest index for this time point
+            const index = Math.round(elapsedMinutes / chartTimeInterval);
+            
+            // If we're beyond the chart range, expand it
+            if (index >= chart.data.labels.length) {
+                const newMinutes = (index + 1) * chartTimeInterval;
+                const hours = Math.floor(newMinutes / 60);
+                const mins = newMinutes % 60;
+                chart.data.labels.push(hours > 0 ? `${hours}h ${mins}m` : `${mins}m`);
+                chart.data.datasets[0].data.push(null);
+                chart.data.datasets[1].data.push(null);
+                
+                // Extend scheduled line
+                const scheduledTemp = calculateScheduledTemp(newMinutes, loadedScheduleData, scheduleStartTemp);
+                chart.data.datasets[2].data.push(scheduledTemp);
+                
+                scheduleTotalMinutes = newMinutes;
+            }
+            
+            // Update data at the correct index
+            if (index >= 0 && index < chart.data.labels.length) {
+                chart.data.datasets[0].data[index] = temp;
+                chart.data.datasets[1].data[index] = setpoint;
+            }
+            
+            // Expand Y-axis if needed
+            if (temp > chart.options.scales.y.max) {
+                chart.options.scales.y.max = Math.ceil(temp * 1.1);
+            }
+            if (setpoint > chart.options.scales.y.max) {
+                chart.options.scales.y.max = Math.ceil(setpoint * 1.1);
+            }
+            
+            chart.update('none');
+        }
             const time = new Date(timestamp).toLocaleTimeString();
             
             chart.data.labels.push(time);
@@ -680,6 +779,9 @@
                 const scheduleResponse = await fetch(`/api/schedules/${name}`);
                 const schedule = await scheduleResponse.json();
                 loadedScheduleData = schedule;
+                
+                // Initialize the chart with this schedule
+                initializeChartForSchedule(schedule);
                 
                 // Then activate it
                 const response = await fetch(`/api/load-schedule/${name}`, { method: 'POST' });
@@ -891,6 +993,18 @@
                 loadedScheduleData = null;
                 scheduleStartTime = null;
                 scheduleStartTemp = null;
+                scheduleMaxTemp = 0;
+                scheduleTotalMinutes = 0;
+                
+                // Clear chart
+                chart.data.labels = [];
+                chart.data.datasets[0].data = [];
+                chart.data.datasets[1].data = [];
+                chart.data.datasets[2].data = [];
+                chart.options.scales.y.min = undefined;
+                chart.options.scales.y.max = undefined;
+                chart.update();
+                
                 document.getElementById('start-btn').disabled = true;
                 document.getElementById('active-schedule-name').textContent = 'No schedule loaded';
                 document.getElementById('active-schedule-summary').textContent = 'Select a schedule from the controls section to begin';
@@ -913,13 +1027,25 @@
                     // Firing just started - capture start conditions
                     scheduleStartTime = new Date(data.timestamp);
                     scheduleStartTemp = data.temperature;
-                    console.log('Firing started - Schedule base:', scheduleStartTemp, '°C at', scheduleStartTime);
+                    console.log('🔥 Firing started!');
+                    console.log('   Schedule base temp:', scheduleStartTemp, '°C');
+                    console.log('   Schedule base time:', scheduleStartTime);
+                    console.log('   Loaded schedule:', loadedScheduleData);
+                    
+                    // Recalculate the scheduled line with actual start temp
+                    for (let i = 0; i < chart.data.labels.length; i++) {
+                        const elapsedMinutes = i * chartTimeInterval;
+                        const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
+                        chart.data.datasets[2].data[i] = scheduledTemp;
+                    }
+                    chart.update();
                 }
                 
                 if (!isFiring && wasFiring) {
-                    // Firing stopped - reset
+                    // Firing stopped - reset timing but keep the data
                     scheduleStartTime = null;
                     scheduleStartTemp = null;
+                    console.log('Firing stopped');
                 }
                 
                 // Update temperature display
@@ -955,8 +1081,8 @@
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
                 
-                // Update chart
-                if (data.temperature !== null) {
+                // Update chart only if firing is active
+                if (data.temperature !== null && isFiring) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
                 }
                 
