@@ -1081,8 +1081,8 @@
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
                 
-                // Update chart only if firing is active
-                if (data.temperature !== null && isFiring) {
+                // Update chart
+                if (data.temperature !== null) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
                 }
                 
