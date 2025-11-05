@@ -534,8 +534,13 @@
                         title: {
                             display: true,
                             text: 'Temperature (°C)'
-                        }
+                        },
+                        beginAtZero: false
                     }
+                },
+                interaction: {
+                    mode: 'index',
+                    intersect: false
                 }
             }
         });
@@ -597,6 +602,7 @@
                 const elapsedMs = new Date(timestamp) - scheduleStartTime;
                 const elapsedMinutes = elapsedMs / (1000 * 60);
                 scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
+                console.log(`Scheduled calc: elapsed=${elapsedMinutes.toFixed(1)}min, start=${scheduleStartTemp}°C, scheduled=${scheduledTemp?.toFixed(1)}°C`);
             }
             chart.data.datasets[2].data.push(scheduledTemp);
             
@@ -882,6 +888,9 @@
                 loadSchedule(name);
             } else {
                 currentScheduleName = '';
+                loadedScheduleData = null;
+                scheduleStartTime = null;
+                scheduleStartTemp = null;
                 document.getElementById('start-btn').disabled = true;
                 document.getElementById('active-schedule-name').textContent = 'No schedule loaded';
                 document.getElementById('active-schedule-summary').textContent = 'Select a schedule from the controls section to begin';
@@ -893,6 +902,26 @@
                 const response = await fetch('/api/status');
                 const data = await response.json();
                 
+                // Get status indicator element
+                const statusIndicator = document.getElementById('status-indicator');
+                
+                // Detect firing start to capture schedule start conditions
+                const wasFiring = statusIndicator && statusIndicator.classList.contains('active');
+                const isFiring = data.firing_active && !data.emergency_stop;
+                
+                if (isFiring && !wasFiring && loadedScheduleData) {
+                    // Firing just started - capture start conditions
+                    scheduleStartTime = new Date(data.timestamp);
+                    scheduleStartTemp = data.temperature;
+                    console.log('Firing started - Schedule base:', scheduleStartTemp, '°C at', scheduleStartTime);
+                }
+                
+                if (!isFiring && wasFiring) {
+                    // Firing stopped - reset
+                    scheduleStartTime = null;
+                    scheduleStartTemp = null;
+                }
+                
                 // Update temperature display
                 const temp = data.temperature !== null ? data.temperature.toFixed(1) : '--';
                 document.getElementById('current-temp').textContent = temp;
@@ -901,7 +930,6 @@
                 document.getElementById('output-bar').style.width = data.output + '%';
                 
                 // Update status
-                const statusIndicator = document.getElementById('status-indicator');
                 const statusText = document.getElementById('firing-status');
                 const startBtn = document.getElementById('start-btn');
                 const stopBtn = document.getElementById('stop-btn');
