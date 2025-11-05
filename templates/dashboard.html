@@ -490,7 +490,8 @@
                     backgroundColor: 'rgba(118, 75, 162, 0.1)',
                     borderWidth: 2,
                     tension: 0.4,
-                    fill: true
+                    fill: true,
+                    spanGaps: true
                 }, {
                     label: 'Setpoint',
                     data: [],
@@ -499,7 +500,8 @@
                     borderWidth: 2,
                     borderDash: [5, 5],
                     tension: 0.4,
-                    fill: false
+                    fill: false,
+                    spanGaps: true
                 }, {
                     label: 'Scheduled',
                     data: [],
@@ -510,7 +512,8 @@
                     tension: 0,
                     fill: false,
                     pointRadius: 2,
-                    pointBackgroundColor: '#10b981'
+                    pointBackgroundColor: '#10b981',
+                    spanGaps: false
                 }]
             },
             options: {
@@ -1078,8 +1081,8 @@
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
                 
-                // Update chart
-                if (data.temperature !== null) {
+                // Update chart only if firing is active
+                if (data.temperature !== null && isFiring) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
                 }
                 
