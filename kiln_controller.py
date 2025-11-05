@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 class KilnController:
-    def __init__(self, relay_pin=23, max_temp=1300, safety_margin=50):
+    def __init__(self, relay_pin=18, max_temp=1300, safety_margin=50):
         """
         Initialize the kiln controller
         
@@ -481,7 +481,7 @@ def start_web_server(port=5000):
 
 if __name__ == "__main__":
     # Initialize kiln controller
-    kiln = KilnController(relay_pin=18, max_temp=1300)
+    kiln = KilnController(relay_pin=23, max_temp=1300)
     
     # Start web server in a separate thread
     web_thread = threading.Thread(target=start_web_server, args=(5000,))
