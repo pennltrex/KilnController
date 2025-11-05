@@ -105,10 +105,10 @@ class KilnController:
             return False
         
         # Check for thermocouple faults
+        fault_dict = self.thermocouple.fault
         for fault_type in ['cj_range', 'tc_range', 'cj_high', 'cj_low', 
                           'tc_high', 'tc_low', 'voltage', 'open_tc']:
-            fault = getattr(self.thermocouple.fault, fault_type)
-            if fault:
+            if fault_dict.get(fault_type, False):
                 logging.error(f"Thermocouple fault: {fault_type} - EMERGENCY STOP")
                 return False
         
