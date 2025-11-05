@@ -67,6 +67,8 @@ class KilnController:
         self.current_segment = 0
         self.firing_active = False
         self.start_time = None
+        self.segment_start_time = None
+        self.segment_start_temp = None
         
         # Data logging
         self.data_log = []
@@ -219,10 +221,7 @@ class KilnController:
         hold_time = segment['hold'] * 60  # Convert minutes to seconds
         
         # Calculate expected temperature based on ramp rate
-        if self.current_segment == 0:
-            start_temp = current_temp if elapsed_time < 60 else 20  # Assume room temp start
-        else:
-            start_temp = self.schedule[self.current_segment - 1]['target']
+        start_temp = self.segment_start_temp
         
         temp_rise = target - start_temp
         ramp_time = abs(temp_rise) / rate if rate > 0 else 0
@@ -236,8 +235,13 @@ class KilnController:
         else:
             # Move to next segment
             self.current_segment += 1
-            logging.info(f"Moving to segment {self.current_segment + 1}")
-            return self.calculate_setpoint(current_temp, 0)
+            if self.current_segment < len(self.schedule):
+                self.segment_start_temp = target
+                self.segment_start_time = time.time()
+                logging.info(f"Moving to segment {self.current_segment + 1}, start temp: {target}°C")
+                return self.calculate_setpoint(current_temp, 0)
+            else:
+                return current_temp, True
         
         return setpoint, False
     
@@ -252,16 +256,22 @@ class KilnController:
         self.current_segment = 0
         self.emergency_stop = False
         
+        # Initialize segment tracking
+        initial_temp = self.read_temperature()
+        self.segment_start_time = self.start_time
+        self.segment_start_temp = initial_temp if initial_temp else 20.0
+        
         logging.info("Starting firing cycle")
         logging.info(f"Schedule loaded with {len(self.schedule)} segments")
         logging.info(f"Schedule: {self.schedule}")
+        logging.info(f"Initial temperature: {self.segment_start_temp:.1f}°C")
         
         try:
             while self.firing_active and not self.emergency_stop:
                 current_temp = self.read_temperature()
-                elapsed_time = time.time() - self.start_time
+                elapsed_time = time.time() - self.segment_start_time
                 
-                logging.info(f"Loop iteration - elapsed: {elapsed_time:.1f}s, temp: {current_temp}°C")
+                logging.info(f"Loop iteration - segment elapsed: {elapsed_time:.1f}s, temp: {current_temp}°C")
                 
                 # Safety check
                 if not self.check_safety(current_temp):
@@ -297,7 +307,7 @@ class KilnController:
                 # Log data
                 log_entry = {
                     'time': datetime.now().isoformat(),
-                    'elapsed': elapsed_time,
+                    'elapsed': time.time() - self.start_time,
                     'temp': current_temp,
                     'setpoint': setpoint,
                     'output': control_output,
