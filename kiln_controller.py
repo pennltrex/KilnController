@@ -253,11 +253,15 @@ class KilnController:
         self.emergency_stop = False
         
         logging.info("Starting firing cycle")
+        logging.info(f"Schedule loaded with {len(self.schedule)} segments")
+        logging.info(f"Schedule: {self.schedule}")
         
         try:
             while self.firing_active and not self.emergency_stop:
                 current_temp = self.read_temperature()
                 elapsed_time = time.time() - self.start_time
+                
+                logging.info(f"Loop iteration - elapsed: {elapsed_time:.1f}s, temp: {current_temp}°C")
                 
                 # Safety check
                 if not self.check_safety(current_temp):
@@ -272,6 +276,8 @@ class KilnController:
                     elapsed_time
                 )
                 
+                logging.info(f"Calculated setpoint: {setpoint:.1f}°C, complete: {complete}")
+                
                 if complete:
                     logging.info("Firing schedule complete")
                     self.firing_active = False
@@ -280,6 +286,8 @@ class KilnController:
                 # Update PID
                 self.pid.setpoint = setpoint
                 control_output = self.pid(current_temp)
+                
+                logging.info(f"PID output: {control_output:.1f}%")
                 
                 # Update state for web interface
                 with self.state_lock:
@@ -299,6 +307,7 @@ class KilnController:
                 logging.info(f"Temp: {current_temp:.1f}°C | Setpoint: {setpoint:.1f}°C | Output: {control_output:.1f}%")
                 
                 # Control relay
+                logging.info(f"Calling control_relay with duty_cycle: {control_output:.1f}%")
                 self.control_relay(control_output)
                 
         except KeyboardInterrupt:
