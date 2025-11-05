@@ -346,7 +346,7 @@
         
         <div class="dashboard">
             <div class="card">
-                <h2>Current Temperature</h2>
+                <h2>Current Status</h2>
                 <div class="temp-display">
                     <span id="current-temp">--</span><span class="temp-unit">°C</span>
                 </div>
@@ -361,11 +361,7 @@
                 <div class="progress-bar">
                     <div class="progress-fill" id="output-bar"></div>
                 </div>
-            </div>
-
-            <div class="card">
-                <h2>Status</h2>
-                <div class="info-row">
+                <div class="info-row" style="margin-top: 15px;">
                     <span class="info-label">Firing Status:</span>
                     <span class="info-value">
                         <span class="status-indicator" id="status-indicator"></span>
@@ -379,6 +375,16 @@
                 <div class="info-row">
                     <span class="info-label">Last Update:</span>
                     <span class="info-value" id="last-update">--</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Active Schedule</h2>
+                <div id="active-schedule-name" style="font-weight: bold; color: #667eea; margin-bottom: 10px;">
+                    No schedule loaded
+                </div>
+                <div id="active-schedule-summary" style="color: #666; font-size: 0.9em;">
+                    Select a schedule from the controls section to begin
                 </div>
             </div>
 
@@ -587,12 +593,64 @@
                     currentScheduleName = name;
                     document.getElementById('schedule-select').value = name;
                     document.getElementById('start-btn').disabled = false;
+                    
+                    // Load and display schedule details
+                    await displayScheduleSummary(name);
+                    
                     showAlert(`Schedule "${name}" loaded successfully`, 'success');
                 } else {
                     showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
                 }
             } catch (error) {
                 showAlert('Failed to load schedule: ' + error.message, 'error');
+            }
+        }
+
+        async function displayScheduleSummary(name) {
+            try {
+                const response = await fetch(`/api/schedules/${name}`);
+                const schedule = await response.json();
+                
+                document.getElementById('active-schedule-name').textContent = name;
+                
+                // Calculate total time and create summary
+                let totalTime = 0;
+                let summaryHTML = '<div style="margin-top: 10px;">';
+                
+                schedule.forEach((segment, index) => {
+                    const startTemp = index === 0 ? 20 : schedule[index - 1].target;
+                    const rampTime = Math.abs(segment.target - startTemp) / segment.rate * 60; // minutes
+                    const totalSegmentTime = rampTime + segment.hold;
+                    totalTime += totalSegmentTime;
+                    
+                    summaryHTML += `
+                        <div class="segment-item" style="margin-bottom: 8px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                            <div style="font-weight: bold; color: #667eea; margin-bottom: 4px;">
+                                Segment ${index + 1}
+                            </div>
+                            <div style="font-size: 0.9em; color: #666;">
+                                Rate: ${segment.rate}°C/hr → Target: ${segment.target}°C
+                                ${segment.hold > 0 ? ` → Hold: ${segment.hold} min` : ''}
+                            </div>
+                            <div style="font-size: 0.85em; color: #999; margin-top: 2px;">
+                                Est. time: ${Math.round(totalSegmentTime)} minutes
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                summaryHTML += `
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #ddd; font-weight: bold; color: #333;">
+                        Total estimated time: ${Math.round(totalTime)} minutes (${(totalTime / 60).toFixed(1)} hours)
+                    </div>
+                `;
+                summaryHTML += '</div>';
+                
+                document.getElementById('active-schedule-summary').innerHTML = summaryHTML;
+                
+            } catch (error) {
+                console.error('Failed to load schedule summary:', error);
+                document.getElementById('active-schedule-summary').textContent = 'Error loading schedule details';
             }
         }
 
