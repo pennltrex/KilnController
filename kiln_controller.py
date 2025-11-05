@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 class KilnController:
-    def __init__(self, relay_pin=18, max_temp=1300, safety_margin=50):
+    def __init__(self, relay_pin=23, max_temp=1300, safety_margin=50):
         """
         Initialize the kiln controller
         
