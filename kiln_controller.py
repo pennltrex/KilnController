@@ -58,7 +58,8 @@ class KilnController:
         
         # PID controller setup
         # Tune these values for your specific kiln
-        self.pid = PID(2.0, 0.5, 1.0, setpoint=0)
+        # For high thermal mass systems like kilns, start conservative
+        self.pid = PID(1.0, 0.1, 0.5, setpoint=0)
         self.pid.output_limits = (0, 100)  # 0-100% duty cycle
         self.pid.sample_time = 1.0  # Update every second
         
@@ -347,8 +348,17 @@ class KilnController:
                 'emergency_stop': self.emergency_stop,
                 'current_segment': self.current_segment,
                 'total_segments': len(self.schedule),
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'pid_kp': self.pid.Kp,
+                'pid_ki': self.pid.Ki,
+                'pid_kd': self.pid.Kd
             }
+    
+    def set_pid_tunings(self, kp, ki, kd):
+        """Update PID tuning parameters"""
+        self.pid.tunings = (kp, ki, kd)
+        logging.info(f"PID tunings updated: Kp={kp}, Ki={ki}, Kd={kd}")
+        return True
     
     def get_data_log(self, limit=100):
         """Get recent data log entries"""
@@ -491,6 +501,29 @@ def stop_firing():
         kiln.emergency_stop = True
         return jsonify({'success': True, 'message': 'Firing stopped'})
     return jsonify({'error': 'Kiln not initialized'}), 500
+
+@app.route('/api/pid', methods=['GET', 'POST'])
+def handle_pid():
+    """Get or set PID tuning parameters"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+    
+    if request.method == 'GET':
+        return jsonify({
+            'kp': kiln.pid.Kp,
+            'ki': kiln.pid.Ki,
+            'kd': kiln.pid.Kd
+        })
+    
+    elif request.method == 'POST':
+        data = request.json
+        kp = float(data.get('kp', kiln.pid.Kp))
+        ki = float(data.get('ki', kiln.pid.Ki))
+        kd = float(data.get('kd', kiln.pid.Kd))
+        
+        if kiln.set_pid_tunings(kp, ki, kd):
+            return jsonify({'success': True, 'message': 'PID tunings updated'})
+        return jsonify({'error': 'Failed to update PID tunings'}), 500
 
 def start_web_server(port=5000):
     """Start the Flask web server"""
