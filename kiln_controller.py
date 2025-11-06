@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 class KilnController:
-    def __init__(self, relay_pin=18, max_temp=1300, safety_margin=50):
+    def __init__(self, relay_pin=23, max_temp=1300, safety_margin=50):
         """
         Initialize the kiln controller
         
@@ -57,7 +57,6 @@ class KilnController:
         self.emergency_stop = False
         
         # PID controller setup
-        # Tune these values for your specific kiln
         # For high thermal mass systems like kilns, start conservative
         self.pid = PID(1.0, 0.1, 0.5, setpoint=0)
         self.pid.output_limits = (0, 100)  # 0-100% duty cycle
@@ -246,6 +245,50 @@ class KilnController:
         
         return setpoint, False
     
+    def save_state(self):
+        """Save current firing state for crash recovery"""
+        if not self.firing_active:
+            return
+        
+        state = {
+            'firing_active': self.firing_active,
+            'schedule': self.schedule,
+            'current_segment': self.current_segment,
+            'start_time': self.start_time,
+            'segment_start_time': self.segment_start_time,
+            'segment_start_temp': self.segment_start_temp,
+            'emergency_stop': self.emergency_stop,
+            'data_log': self.data_log
+        }
+        
+        try:
+            with open('firing_state.json', 'w') as f:
+                json.dump(state, f, indent=2, default=str)
+        except Exception as e:
+            logging.error(f"Failed to save firing state: {e}")
+    
+    def load_state(self):
+        """Load saved firing state"""
+        try:
+            import os
+            if not os.path.exists('firing_state.json'):
+                return None
+            
+            with open('firing_state.json', 'r') as f:
+                state = json.load(f)
+            
+            # Check if state is recent (within 1 hour)
+            if state.get('start_time'):
+                state_age = time.time() - float(state['start_time'])
+                if state_age > 3600:  # More than 1 hour old
+                    logging.info("Saved state is too old, ignoring")
+                    return None
+            
+            return state
+        except Exception as e:
+            logging.error(f"Failed to load firing state: {e}")
+            return None
+    
     def run_firing(self):
         """Main firing control loop"""
         if not self.schedule:
@@ -338,89 +381,6 @@ class KilnController:
                 pass
             logging.info("Kiln powered off")
     
-    def save_data_log(self, filename='kiln_data.json'):
-        """Save firing data to file"""
-        try:
-            with open(filename, 'w') as f:
-                json.dump(self.data_log, f, indent=2)
-            logging.info(f"Data log saved to {filename}")
-        except Exception as e:
-            logging.error(f"Failed to save data log: {e}")
-    
-    def get_state(self):
-        """Get current state for web interface"""
-        with self.state_lock:
-            return {
-                'temperature': self.current_temp,
-                'setpoint': self.current_setpoint,
-                'output': self.current_output,
-                'firing_active': self.firing_active,
-                'emergency_stop': self.emergency_stop,
-                'current_segment': self.current_segment,
-                'total_segments': len(self.schedule),
-                'timestamp': datetime.now().isoformat(),
-                'pid_kp': self.pid.Kp,
-                'pid_ki': self.pid.Ki,
-                'pid_kd': self.pid.Kd,
-                'schedule': self.schedule,
-                'start_time': self.start_time,
-                'segment_start_temp': self.segment_start_temp
-            }
-    
-    def set_pid_tunings(self, kp, ki, kd):
-        """Update PID tuning parameters"""
-        self.pid.tunings = (kp, ki, kd)
-        logging.info(f"PID tunings updated: Kp={kp}, Ki={ki}, Kd={kd}")
-        return True
-    
-    def get_data_log(self, limit=100):
-        """Get recent data log entries"""
-        return self.data_log[-limit:] if limit else self.data_log
-    
-    def save_state(self):
-        """Save current firing state for crash recovery"""
-        if not self.firing_active:
-            return
-        
-        state = {
-            'firing_active': self.firing_active,
-            'schedule': self.schedule,
-            'current_segment': self.current_segment,
-            'start_time': self.start_time,
-            'segment_start_time': self.segment_start_time,
-            'segment_start_temp': self.segment_start_temp,
-            'emergency_stop': self.emergency_stop,
-            'data_log': self.data_log
-        }
-        
-        try:
-            with open('firing_state.json', 'w') as f:
-                json.dump(state, f, indent=2, default=str)
-        except Exception as e:
-            logging.error(f"Failed to save firing state: {e}")
-    
-    def load_state(self):
-        """Load saved firing state"""
-        try:
-            import os
-            if not os.path.exists('firing_state.json'):
-                return None
-            
-            with open('firing_state.json', 'r') as f:
-                state = json.load(f)
-            
-            # Check if state is recent (within 1 hour)
-            if state.get('start_time'):
-                state_age = time.time() - float(state['start_time'])
-                if state_age > 3600:  # More than 1 hour old
-                    logging.info("Saved state is too old, ignoring")
-                    return None
-            
-            return state
-        except Exception as e:
-            logging.error(f"Failed to load firing state: {e}")
-            return None
-    
     def resume_firing(self, state):
         """Resume firing from saved state"""
         logging.info("Resuming firing from saved state")
@@ -509,6 +469,47 @@ class KilnController:
             except:
                 pass
             logging.info("Kiln powered off")
+    
+    def save_data_log(self, filename='kiln_data.json'):
+        """Save firing data to file"""
+        try:
+            with open(filename, 'w') as f:
+                json.dump(self.data_log, f, indent=2)
+            logging.info(f"Data log saved to {filename}")
+        except Exception as e:
+            logging.error(f"Failed to save data log: {e}")
+    
+    def get_state(self):
+        """Get current state for web interface"""
+        with self.state_lock:
+            return {
+                'temperature': self.current_temp,
+                'setpoint': self.current_setpoint,
+                'output': self.current_output,
+                'firing_active': self.firing_active,
+                'emergency_stop': self.emergency_stop,
+                'current_segment': self.current_segment,
+                'total_segments': len(self.schedule),
+                'timestamp': datetime.now().isoformat(),
+                'pid_kp': self.pid.Kp,
+                'pid_ki': self.pid.Ki,
+                'pid_kd': self.pid.Kd,
+                'schedule': self.schedule,
+                'start_time': self.start_time,
+                'segment_start_temp': self.segment_start_temp
+            }
+    
+    def get_data_log(self, limit=100):
+        """Get recent data log entries"""
+        return self.data_log[-limit:] if limit else self.data_log
+    
+    def set_pid_tunings(self, kp, ki, kd):
+        """Update PID tuning parameters"""
+        self.pid.tunings = (kp, ki, kd)
+        logging.info(f"PID tunings updated: Kp={kp}, Ki={ki}, Kd={kd}")
+        return True
+    
+    def manual_mode(self, target_temp, duration_minutes=60):
         """Simple manual control mode"""
         logging.info(f"Starting manual mode: {target_temp}°C for {duration_minutes} minutes")
         
@@ -848,6 +849,8 @@ def get_history():
             'firing_active': kiln.firing_active
         })
     return jsonify({'error': 'Kiln not initialized'}), 500
+
+def start_web_server(port=5000):
     """Start the Flask web server"""
     logging.info(f"Starting web server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
