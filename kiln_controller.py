@@ -815,7 +815,9 @@ def handle_resume():
     if request.method == 'GET':
         # Check if there's a saved state
         state = kiln.load_state()
-        if state:
+        if state and not kiln.firing_active:
+            # Only show resume dialog if firing is NOT active
+            # (meaning it was interrupted)
             return jsonify({
                 'has_saved_state': True,
                 'schedule_length': len(state.get('schedule', [])),
