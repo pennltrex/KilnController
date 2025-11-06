@@ -274,6 +274,35 @@
             width: 100%;
             background: white;
         }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: #ddd;
+            border-radius: 3px;
+            outline: none;
+            margin: 8px 0;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #667eea;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #667eea;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
 
         button {
             flex: 1;
@@ -400,6 +429,10 @@
                     <span class="info-label">Last Update:</span>
                     <span class="info-value" id="last-update">--</span>
                 </div>
+                <div class="info-row" style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #f0f0f0;">
+                    <span class="info-label" style="font-size: 0.85em;">PID:</span>
+                    <span class="info-value" style="font-size: 0.85em;" id="pid-display">Kp:-- Ki:-- Kd:--</span>
+                </div>
             </div>
 
             <div class="card">
@@ -431,6 +464,35 @@
                 <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
                     ⚠️ Select a schedule before starting
                 </p>
+            </div>
+
+            <div class="card">
+                <h2>PID Tuning</h2>
+                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                    Adjust these values to fine-tune temperature control
+                </p>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
+                    <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
+                </div>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label>Ki (Integral): <span id="ki-value">0.1</span></label>
+                    <input type="range" id="ki-slider" min="0" max="2.0" step="0.05" value="0.1" style="width: 100%;">
+                </div>
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <label>Kd (Derivative): <span id="kd-value">0.5</span></label>
+                    <input type="range" id="kd-slider" min="0" max="3.0" step="0.1" value="0.5" style="width: 100%;">
+                </div>
+                <button class="btn-primary" onclick="updatePID()" style="width: 100%;">
+                    Apply PID Settings
+                </button>
+                <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                    <strong>Quick Guide:</strong><br>
+                    • <strong>Overshoot?</strong> Decrease Kp, increase Kd<br>
+                    • <strong>Too slow?</strong> Increase Kp<br>
+                    • <strong>Steady error?</strong> Increase Ki<br>
+                    • <strong>Oscillating?</strong> Decrease Kp and Ki
+                </div>
             </div>
 
             <div class="card">
@@ -558,6 +620,60 @@
         let scheduleMaxTemp = 0;
         let scheduleTotalMinutes = 0;
         let chartTimeInterval = 10;
+
+        // PID slider update handlers
+        document.getElementById('kp-slider').addEventListener('input', function(e) {
+            document.getElementById('kp-value').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+        
+        document.getElementById('ki-slider').addEventListener('input', function(e) {
+            document.getElementById('ki-value').textContent = parseFloat(e.target.value).toFixed(2);
+        });
+        
+        document.getElementById('kd-slider').addEventListener('input', function(e) {
+            document.getElementById('kd-value').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+
+        async function updatePID() {
+            const kp = parseFloat(document.getElementById('kp-slider').value);
+            const ki = parseFloat(document.getElementById('ki-slider').value);
+            const kd = parseFloat(document.getElementById('kd-slider').value);
+            
+            try {
+                const response = await fetch('/api/pid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ kp, ki, kd })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`PID updated: Kp=${kp.toFixed(1)}, Ki=${ki.toFixed(2)}, Kd=${kd.toFixed(1)}`, 'success');
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to update PID: ' + error.message, 'error');
+            }
+        }
+
+        async function loadPIDSettings() {
+            try {
+                const response = await fetch('/api/pid');
+                const data = await response.json();
+                
+                document.getElementById('kp-slider').value = data.kp;
+                document.getElementById('ki-slider').value = data.ki;
+                document.getElementById('kd-slider').value = data.kd;
+                
+                document.getElementById('kp-value').textContent = data.kp.toFixed(1);
+                document.getElementById('ki-value').textContent = data.ki.toFixed(2);
+                document.getElementById('kd-value').textContent = data.kd.toFixed(1);
+            } catch (error) {
+                console.error('Failed to load PID settings:', error);
+            }
+        }
 
         function initializeChartForSchedule(schedule) {
             if (!schedule || schedule.length === 0) return;
@@ -1022,6 +1138,12 @@
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
                 
+                // Update PID display
+                if (data.pid_kp !== undefined) {
+                    document.getElementById('pid-display').textContent = 
+                        `Kp:${data.pid_kp.toFixed(1)} Ki:${data.pid_ki.toFixed(2)} Kd:${data.pid_kd.toFixed(1)}`;
+                }
+                
                 if (data.temperature !== null && isFiring) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
                 }
@@ -1075,6 +1197,7 @@
         }
 
         loadScheduleList();
+        loadPIDSettings();
         updateStatus();
         setInterval(updateStatus, 2000);
     </script>
