@@ -440,138 +440,172 @@
         <div id="alert" class="alert"></div>
         
         <div id="dashboard-tab" class="tab-content active">
-        <div class="dashboard">
-            <div class="card">
-                <h2>Current Status</h2>
-                <div class="temp-display">
-                    <span id="current-temp">--</span><span class="temp-unit">°C</span>
+            <div class="dashboard">
+                <div class="card">
+                    <h2>Current Status</h2>
+                    <div class="temp-display">
+                        <span id="current-temp">--</span><span class="temp-unit">°C</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Setpoint:</span>
+                        <span class="info-value"><span id="setpoint">--</span>°C</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Output:</span>
+                        <span class="info-value"><span id="output">--</span>%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="output-bar"></div>
+                    </div>
+                    <div class="info-row" style="margin-top: 15px;">
+                        <span class="info-label">Firing Status:</span>
+                        <span class="info-value">
+                            <span class="status-indicator" id="status-indicator"></span>
+                            <span id="firing-status">Idle</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Current Segment:</span>
+                        <span class="info-value"><span id="current-segment">--</span> / <span id="total-segments">--</span></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Last Update:</span>
+                        <span class="info-value" id="last-update">--</span>
+                    </div>
+                    <div class="info-row" style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #f0f0f0;">
+                        <span class="info-label" style="font-size: 0.85em;">PID:</span>
+                        <span class="info-value" style="font-size: 0.85em;" id="pid-display">Kp:-- Ki:-- Kd:--</span>
+                    </div>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">Setpoint:</span>
-                    <span class="info-value"><span id="setpoint">--</span>°C</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Output:</span>
-                    <span class="info-value"><span id="output">--</span>%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="output-bar"></div>
-                </div>
-                <div class="info-row" style="margin-top: 15px;">
-                    <span class="info-label">Firing Status:</span>
-                    <span class="info-value">
-                        <span class="status-indicator" id="status-indicator"></span>
-                        <span id="firing-status">Idle</span>
-                    </span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Current Segment:</span>
-                    <span class="info-value"><span id="current-segment">--</span> / <span id="total-segments">--</span></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Last Update:</span>
-                    <span class="info-value" id="last-update">--</span>
-                </div>
-                <div class="info-row" style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #f0f0f0;">
-                    <span class="info-label" style="font-size: 0.85em;">PID:</span>
-                    <span class="info-value" style="font-size: 0.85em;" id="pid-display">Kp:-- Ki:-- Kd:--</span>
-                </div>
-            </div>
 
-            <div class="card">
-                <h2>Active Schedule</h2>
-                <div id="active-schedule-name" style="font-weight: bold; color: #667eea; margin-bottom: 10px;">
-                    No schedule loaded
+                <div class="card">
+                    <h2>Active Schedule</h2>
+                    <div id="active-schedule-name" style="font-weight: bold; color: #667eea; margin-bottom: 10px;">
+                        No schedule loaded
+                    </div>
+                    <div id="active-schedule-summary" style="color: #666; font-size: 0.9em;">
+                        Select a schedule from the controls section to begin
+                    </div>
                 </div>
-                <div id="active-schedule-summary" style="color: #666; font-size: 0.9em;">
-                    Select a schedule from the controls section to begin
-                </div>
-            </div>
 
-            <div class="card">
-                <h2>Controls</h2>
-                <div class="input-group">
-                    <label>Select Firing Schedule:</label>
-                    <select id="schedule-select">
-                        <option value="">-- No schedule loaded --</option>
-                    </select>
+                <div class="card">
+                    <h2>Controls</h2>
+                    <div class="input-group">
+                        <label>Select Firing Schedule:</label>
+                        <select id="schedule-select">
+                            <option value="">-- No schedule loaded --</option>
+                        </select>
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" id="start-btn" onclick="startFiring()" disabled>
+                            Start Firing
+                        </button>
+                        <button class="btn-danger" id="stop-btn" onclick="stopFiring()" disabled>
+                            Emergency Stop
+                        </button>
+                    </div>
+                    <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+                        ⚠️ Select a schedule before starting
+                    </p>
                 </div>
-                <div class="controls">
-                    <button class="btn-primary" id="start-btn" onclick="startFiring()" disabled>
-                        Start Firing
-                    </button>
-                    <button class="btn-danger" id="stop-btn" onclick="stopFiring()" disabled>
-                        Emergency Stop
-                    </button>
-                </div>
-                <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
-                    ⚠️ Select a schedule before starting
-                </p>
-            </div>
 
-            </div>
+                <div class="card">
+                    <h2>Firing Schedules</h2>
+                    <div class="schedule-list" id="schedule-list">
+                        <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" onclick="showScheduleEditor()">
+                            Create New Schedule
+                        </button>
+                    </div>
+                </div>
 
-            <div class="card chart-card">
-                <h2>Temperature History</h2>
-                <div class="chart-container">
-                    <canvas id="tempChart"></canvas>
+                <div class="card" id="schedule-editor" style="display: none;">
+                    <h2>Schedule Editor</h2>
+                    <div class="input-group">
+                        <label>Schedule Name:</label>
+                        <input type="text" id="schedule-name" placeholder="e.g., Bisque Cone 04">
+                    </div>
+                    <div class="segment-editor" id="segment-editor">
+                        <!-- Segments will be added here -->
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" onclick="addSegment()">
+                            Add Segment
+                        </button>
+                        <button class="btn-primary" onclick="saveSchedule()">
+                            Save Schedule
+                        </button>
+                        <button class="btn-danger btn-small" onclick="cancelEdit()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card chart-card">
+                    <h2>Temperature History</h2>
+                    <div class="chart-container">
+                        <canvas id="tempChart"></canvas>
+                    </div>
                 </div>
             </div>
-        </div>
         </div>
         
         <div id="settings-tab" class="tab-content">
-        <div class="dashboard">
-            <div class="card">
-                <h2>PID Tuning</h2>
-                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
-                    Adjust these values to fine-tune temperature control
-                </p>
+            <div class="dashboard">
+                <div class="card">
+                    <h2>PID Tuning</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Adjust these values to fine-tune temperature control
+                    </p>
+                    
+                    <button class="btn-primary" onclick="autoTunePID()" style="width: 100%; margin-bottom: 20px;">
+                        🎯 Auto-Tune PID
+                    </button>
+                    <p style="color: #666; font-size: 0.85em; margin-bottom: 15px; text-align: center;">
+                        Or adjust manually:
+                    </p>
+                    
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
+                        <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Ki (Integral): <span id="ki-value">0.1</span></label>
+                        <input type="range" id="ki-slider" min="0" max="2.0" step="0.05" value="0.1" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Kd (Derivative): <span id="kd-value">0.5</span></label>
+                        <input type="range" id="kd-slider" min="0" max="3.0" step="0.1" value="0.5" style="width: 100%;">
+                    </div>
+                    <button class="btn-primary" onclick="updatePID()" style="width: 100%;">
+                        Apply PID Settings
+                    </button>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                        <strong>Quick Guide:</strong><br>
+                        • <strong>Overshoot?</strong> Decrease Kp, increase Kd<br>
+                        • <strong>Too slow?</strong> Increase Kp<br>
+                        • <strong>Steady error?</strong> Increase Ki<br>
+                        • <strong>Oscillating?</strong> Decrease Kp and Ki
+                    </div>
+                </div>
                 
-                <button class="btn-primary" onclick="autoTunePID()" style="width: 100%; margin-bottom: 20px;">
-                    🎯 Auto-Tune PID
-                </button>
-                <p style="color: #666; font-size: 0.85em; margin-bottom: 15px; text-align: center;">
-                    Or adjust manually:
-                </p>
-                
-                <div class="input-group" style="margin-bottom: 10px;">
-                    <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
-                    <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
-                </div>
-                <div class="input-group" style="margin-bottom: 10px;">
-                    <label>Ki (Integral): <span id="ki-value">0.1</span></label>
-                    <input type="range" id="ki-slider" min="0" max="2.0" step="0.05" value="0.1" style="width: 100%;">
-                </div>
-                <div class="input-group" style="margin-bottom: 15px;">
-                    <label>Kd (Derivative): <span id="kd-value">0.5</span></label>
-                    <input type="range" id="kd-slider" min="0" max="3.0" step="0.1" value="0.5" style="width: 100%;">
-                </div>
-                <button class="btn-primary" onclick="updatePID()" style="width: 100%;">
-                    Apply PID Settings
-                </button>
-                <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
-                    <strong>Quick Guide:</strong><br>
-                    • <strong>Overshoot?</strong> Decrease Kp, increase Kd<br>
-                    • <strong>Too slow?</strong> Increase Kp<br>
-                    • <strong>Steady error?</strong> Increase Ki<br>
-                    • <strong>Oscillating?</strong> Decrease Kp and Ki
-                </div>
-            </div>
-            
-            <div class="card">
-                <h2>Configuration</h2>
-                <p style="color: #666; font-size: 0.9em;">
-                    Current PID settings are saved automatically when you apply changes. 
-                    For other configuration options, edit <code>config.json</code> on the Raspberry Pi.
-                </p>
-                <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
-                    <strong>Configuration File Location:</strong><br>
-                    <code>~/KilnController/config.json</code>
+                <div class="card">
+                    <h2>Configuration</h2>
+                    <p style="color: #666; font-size: 0.9em;">
+                        Current PID settings are saved automatically when you apply changes. 
+                        For other configuration options, edit <code>config.json</code> on the Raspberry Pi.
+                    </p>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                        <strong>Configuration File Location:</strong><br>
+                        <code>~/KilnController/config.json</code>
+                    </div>
                 </div>
             </div>
         </div>
-        </div>
+        
+    </div>
 
     <script>
         // Chart setup
@@ -646,7 +680,6 @@
             }
         });
 
-        const maxDataPoints = 100;
         let currentScheduleName = '';
         let editingSchedule = false;
         let scheduleStartTime = null;
@@ -1228,7 +1261,6 @@
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
                 
-                // Update PID display
                 if (data.pid_kp !== undefined) {
                     document.getElementById('pid-display').textContent = 
                         `Kp:${data.pid_kp.toFixed(1)} Ki:${data.pid_ki.toFixed(2)} Kd:${data.pid_kd.toFixed(1)}`;
@@ -1292,9 +1324,7 @@
             console.log('Checking for elements:');
             console.log('  schedule-list:', document.getElementById('schedule-list'));
             console.log('  schedule-select:', document.getElementById('schedule-select'));
-            console.log('  All elements with schedule-list class:', document.querySelectorAll('.schedule-list'));
             
-            // Small delay to ensure everything is rendered
             setTimeout(() => {
                 loadScheduleList();
                 loadPIDSettings();
