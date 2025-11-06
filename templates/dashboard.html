@@ -1287,12 +1287,14 @@
         }
 
         // Initialize on page load
-        console.log('Initializing kiln controller dashboard...');
-        loadScheduleList();
-        loadPIDSettings();
-        updateStatus();
-        setInterval(updateStatus, 2000);
-        console.log('Dashboard initialized');
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing kiln controller dashboard...');
+            loadScheduleList();
+            loadPIDSettings();
+            updateStatus();
+            setInterval(updateStatus, 2000);
+            console.log('Dashboard initialized');
+        });
     </script>
 </body>
 </html>
