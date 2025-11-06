@@ -1289,8 +1289,17 @@
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Initializing kiln controller dashboard...');
-            loadScheduleList();
-            loadPIDSettings();
+            console.log('Checking for elements:');
+            console.log('  schedule-list:', document.getElementById('schedule-list'));
+            console.log('  schedule-select:', document.getElementById('schedule-select'));
+            console.log('  All elements with schedule-list class:', document.querySelectorAll('.schedule-list'));
+            
+            // Small delay to ensure everything is rendered
+            setTimeout(() => {
+                loadScheduleList();
+                loadPIDSettings();
+            }, 100);
+            
             updateStatus();
             setInterval(updateStatus, 2000);
             console.log('Dashboard initialized');
