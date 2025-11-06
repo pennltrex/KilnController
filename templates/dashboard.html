@@ -428,6 +428,27 @@
         
         <div id="alert" class="alert"></div>
         
+        <!-- Resume Dialog -->
+        <div id="resume-dialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; padding: 20px;">
+            <div class="card" style="max-width: 500px; margin: 100px auto;">
+                <h2 style="color: #ef4444;">⚠️ Interrupted Firing Detected</h2>
+                <p style="margin: 20px 0; color: #666;">
+                    A firing was in progress before the system restarted. Would you like to resume where it left off?
+                </p>
+                <div id="resume-info" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 0.9em;">
+                    <!-- Info will be inserted here -->
+                </div>
+                <div class="controls">
+                    <button class="btn-primary" onclick="resumeFiring()">
+                        Resume Firing
+                    </button>
+                    <button class="btn-danger" onclick="discardState()">
+                        Discard & Start Fresh
+                    </button>
+                </div>
+            </div>
+        </div>
+        
         <!-- Settings Modal -->
         <div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; padding: 20px; overflow-y: auto;" onclick="if(event.target.id==='settings-modal') closeSettings()">
             <div class="card" style="max-width: 800px; margin: 50px auto;">
@@ -706,6 +727,81 @@
         let scheduleMaxTemp = 0;
         let scheduleTotalMinutes = 0;
         let chartTimeInterval = 10;
+        let historyLoaded = false;
+
+        async function checkForSavedState() {
+            try {
+                const response = await fetch('/api/resume');
+                const data = await response.json();
+                
+                if (data.has_saved_state) {
+                    const resumeInfo = document.getElementById('resume-info');
+                    resumeInfo.innerHTML = `
+                        <strong>Firing Details:</strong><br>
+                        Segments: ${data.schedule_length}<br>
+                        Current Segment: ${data.current_segment + 1}<br>
+                        Elapsed Time: ${Math.round(data.elapsed_minutes)} minutes
+                    `;
+                    document.getElementById('resume-dialog').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error checking for saved state:', error);
+            }
+        }
+
+        async function resumeFiring() {
+            try {
+                const response = await fetch('/api/resume', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('resume-dialog').style.display = 'none';
+                    showAlert('Firing resumed successfully', 'success');
+                    await loadHistory();
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to resume firing: ' + error.message, 'error');
+            }
+        }
+
+        async function discardState() {
+            document.getElementById('resume-dialog').style.display = 'none';
+            showAlert('Saved state discarded', 'success');
+        }
+
+        async function loadHistory() {
+            if (historyLoaded) return;
+            
+            try {
+                const response = await fetch('/api/history');
+                const data = await response.json();
+                
+                if (data.data && data.data.length > 0) {
+                    historyLoaded = true;
+                    
+                    console.log(`Loading ${data.data.length} historical data points`);
+                    
+                    // Clear existing real-time data first
+                    const labelsCount = chart.data.labels.length;
+                    chart.data.datasets[0].data = new Array(labelsCount).fill(null);
+                    chart.data.datasets[1].data = new Array(labelsCount).fill(null);
+                    
+                    // Populate chart with all historical data
+                    data.data.forEach(entry => {
+                        if (scheduleStartTime && loadedScheduleData) {
+                            updateChart(entry.time, entry.temp, entry.setpoint);
+                        }
+                    });
+                    
+                    chart.update();
+                    console.log('Historical data loaded successfully');
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
 
         // PID slider update handlers
         document.getElementById('kp-slider').addEventListener('input', function(e) {
@@ -1248,9 +1344,34 @@
                     chart.update();
                 }
                 
+                // Load history when firing is active but history not yet loaded
+                if (isFiring && !historyLoaded && loadedScheduleData) {
+                    loadHistory();
+                }
+                
+                // If firing is active but schedule not loaded, load it from status
+                if (isFiring && !loadedScheduleData && data.schedule && data.schedule.length > 0) {
+                    loadedScheduleData = data.schedule;
+                    scheduleStartTime = new Date(data.start_time * 1000);
+                    scheduleStartTemp = data.segment_start_temp;
+                    
+                    initializeChartForSchedule(data.schedule);
+                    
+                    // Recalculate scheduled line
+                    for (let i = 0; i < chart.data.labels.length; i++) {
+                        const elapsedMinutes = i * chartTimeInterval;
+                        const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
+                        chart.data.datasets[2].data[i] = scheduledTemp;
+                    }
+                    
+                    console.log('Loaded active firing schedule from status');
+                    loadHistory();
+                }
+                
                 if (!isFiring && wasFiring) {
                     scheduleStartTime = null;
                     scheduleStartTemp = null;
+                    historyLoaded = false;
                     console.log('Firing stopped');
                 }
                 
@@ -1339,6 +1460,7 @@
 
         loadScheduleList();
         loadPIDSettings();
+        checkForSavedState();
         updateStatus();
         setInterval(updateStatus, 2000);
     </script>
