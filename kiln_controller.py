@@ -391,6 +391,107 @@ class KilnController:
         finally:
             self.relay.value = False
             logging.info("Manual mode ended")
+    
+    def autotune_pid(self):
+        """
+        Auto-tune PID parameters using step response test
+        Returns suggested Kp, Ki, Kd values
+        """
+        logging.info("Starting PID auto-tune")
+        
+        # Get starting temperature
+        start_temp = self.read_temperature()
+        if start_temp is None:
+            logging.error("Cannot read starting temperature")
+            return None
+        
+        logging.info(f"Starting temperature: {start_temp:.1f}°C")
+        
+        # Run step response test - apply 50% power
+        test_duration = 600  # 10 minutes
+        power_level = 50.0  # 50% power
+        
+        temps = []
+        times = []
+        start_time = time.time()
+        
+        logging.info(f"Applying {power_level}% power for {test_duration}s")
+        
+        try:
+            while time.time() - start_time < test_duration:
+                current_temp = self.read_temperature()
+                elapsed = time.time() - start_time
+                
+                if not self.check_safety(current_temp):
+                    self.relay.value = False
+                    logging.error("Safety check failed during auto-tune")
+                    return None
+                
+                temps.append(current_temp)
+                times.append(elapsed)
+                
+                # Apply constant power
+                cycle_time = 10.0
+                on_time = (power_level / 100.0) * cycle_time
+                
+                self.relay.value = True
+                time.sleep(on_time)
+                self.relay.value = False
+                time.sleep(cycle_time - on_time)
+                
+                logging.info(f"Auto-tune: {elapsed:.0f}s, Temp: {current_temp:.1f}°C")
+            
+        except KeyboardInterrupt:
+            logging.info("Auto-tune interrupted")
+            self.relay.value = False
+            return None
+        finally:
+            self.relay.value = False
+        
+        # Analyze response and calculate PID parameters
+        if len(temps) < 10:
+            logging.error("Insufficient data for auto-tune")
+            return None
+        
+        # Calculate parameters using simplified Cohen-Coon method
+        initial_temp = temps[0]
+        final_temp = temps[-1]
+        delta_temp = final_temp - initial_temp
+        
+        if delta_temp < 5:
+            logging.error("Temperature rise too small for reliable auto-tune")
+            return None
+        
+        # Find time to reach 63.2% of final value (time constant)
+        target_63 = initial_temp + 0.632 * delta_temp
+        tau = None
+        for i, temp in enumerate(temps):
+            if temp >= target_63:
+                tau = times[i]
+                break
+        
+        if tau is None or tau < 10:
+            logging.error("Could not determine time constant")
+            return None
+        
+        # Process gain (change in temp per % power)
+        process_gain = delta_temp / power_level
+        
+        # Calculate PID parameters (conservative tuning for kilns)
+        # Using modified Ziegler-Nichols for slow processes
+        kp = 0.9 / process_gain
+        ki = kp / (3.0 * tau)
+        kd = kp * tau / 10.0
+        
+        # Apply limits for safety
+        kp = max(0.1, min(3.0, kp))
+        ki = max(0.01, min(1.0, ki))
+        kd = max(0.1, min(2.0, kd))
+        
+        logging.info(f"Auto-tune complete: Kp={kp:.2f}, Ki={ki:.2f}, Kd={kd:.2f}")
+        logging.info(f"Process gain: {process_gain:.3f}°C/%, Time constant: {tau:.1f}s")
+        
+        return {'kp': kp, 'ki': ki, 'kd': kd}
 
 
 # Global kiln controller instance
@@ -524,6 +625,41 @@ def handle_pid():
         if kiln.set_pid_tunings(kp, ki, kd):
             return jsonify({'success': True, 'message': 'PID tunings updated'})
         return jsonify({'error': 'Failed to update PID tunings'}), 500
+
+@app.route('/api/autotune', methods=['POST'])
+def autotune():
+    """Run PID auto-tune"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+    
+    if kiln.firing_active:
+        return jsonify({'error': 'Cannot auto-tune while firing is active'}), 400
+    
+    # Run auto-tune in a separate thread
+    def run_autotune():
+        result = kiln.autotune_pid()
+        if result:
+            # Store result for retrieval
+            kiln.autotune_result = result
+    
+    autotune_thread = threading.Thread(target=run_autotune)
+    autotune_thread.daemon = True
+    autotune_thread.start()
+    
+    # Wait for completion (with timeout)
+    autotune_thread.join(timeout=700)  # 11 minutes max
+    
+    if hasattr(kiln, 'autotune_result') and kiln.autotune_result:
+        result = kiln.autotune_result
+        del kiln.autotune_result
+        return jsonify({
+            'success': True,
+            'kp': result['kp'],
+            'ki': result['ki'],
+            'kd': result['kd']
+        })
+    else:
+        return jsonify({'error': 'Auto-tune failed or timed out'}), 500
 
 def start_web_server(port=5000):
     """Start the Flask web server"""
