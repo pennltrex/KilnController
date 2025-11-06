@@ -28,9 +28,46 @@
         h1 {
             color: white;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             font-size: 2.5em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+        
+        .tab-button {
+            padding: 12px 30px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .tab-button.active {
+            background: white;
+            color: #667eea;
+            border-color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
         }
 
         .dashboard {
@@ -395,8 +432,14 @@
     <div class="container">
         <h1>🔥 Kiln Controller Dashboard</h1>
         
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('dashboard')">Dashboard</button>
+            <button class="tab-button" onclick="switchTab('settings')">Settings</button>
+        </div>
+        
         <div id="alert" class="alert"></div>
         
+        <div id="dashboard-tab" class="tab-content active">
         <div class="dashboard">
             <div class="card">
                 <h2>Current Status</h2>
@@ -466,6 +509,19 @@
                 </p>
             </div>
 
+            </div>
+
+            <div class="card chart-card">
+                <h2>Temperature History</h2>
+                <div class="chart-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+        </div>
+        </div>
+        
+        <div id="settings-tab" class="tab-content">
+        <div class="dashboard">
             <div class="card">
                 <h2>PID Tuning</h2>
                 <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
@@ -494,48 +550,21 @@
                     • <strong>Oscillating?</strong> Decrease Kp and Ki
                 </div>
             </div>
-
+            
             <div class="card">
-                <h2>Firing Schedules</h2>
-                <div class="schedule-list" id="schedule-list">
-                    <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
-                </div>
-                <div class="controls">
-                    <button class="btn-primary" onclick="showScheduleEditor()">
-                        Create New Schedule
-                    </button>
-                </div>
-            </div>
-
-            <div class="card" id="schedule-editor" style="display: none;">
-                <h2>Schedule Editor</h2>
-                <div class="input-group">
-                    <label>Schedule Name:</label>
-                    <input type="text" id="schedule-name" placeholder="e.g., Bisque Cone 04">
-                </div>
-                <div class="segment-editor" id="segment-editor">
-                    <!-- Segments will be added here -->
-                </div>
-                <div class="controls">
-                    <button class="btn-primary" onclick="addSegment()">
-                        Add Segment
-                    </button>
-                    <button class="btn-primary" onclick="saveSchedule()">
-                        Save Schedule
-                    </button>
-                    <button class="btn-danger btn-small" onclick="cancelEdit()">
-                        Cancel
-                    </button>
-                </div>
-            </div>
-
-            <div class="card chart-card">
-                <h2>Temperature History</h2>
-                <div class="chart-container">
-                    <canvas id="tempChart"></canvas>
+                <h2>Configuration</h2>
+                <p style="color: #666; font-size: 0.9em;">
+                    Current PID settings are saved automatically when you apply changes. 
+                    For other configuration options, edit <code>config.json</code> on the Raspberry Pi.
+                </p>
+                <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                    <strong>Configuration File Location:</strong><br>
+                    <code>~/KilnController/config.json</code>
                 </div>
             </div>
         </div>
+        </div>
+        
     </div>
 
     <script>
