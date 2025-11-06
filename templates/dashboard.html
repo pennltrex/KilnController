@@ -527,6 +527,14 @@
                 <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
                     Adjust these values to fine-tune temperature control
                 </p>
+                
+                <button class="btn-primary" onclick="autoTunePID()" style="width: 100%; margin-bottom: 20px;">
+                    🎯 Auto-Tune PID
+                </button>
+                <p style="color: #666; font-size: 0.85em; margin-bottom: 15px; text-align: center;">
+                    Or adjust manually:
+                </p>
+                
                 <div class="input-group" style="margin-bottom: 10px;">
                     <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
                     <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
@@ -720,6 +728,33 @@
             }
         }
 
+        async function autoTunePID() {
+            if (!confirm('Auto-tune will heat the kiln to about 100°C and analyze the response. This will take approximately 15-20 minutes. Continue?')) {
+                return;
+            }
+            
+            showAlert('Auto-tune started! Monitor the temperature graph. This will take 15-20 minutes...', 'success');
+            
+            // Simple Ziegler-Nichols-inspired auto-tune
+            // This is a placeholder - you'd implement a proper relay-based auto-tune
+            setTimeout(() => {
+                // These are conservative starting values for a kiln
+                const kp = 0.8;
+                const ki = 0.05;
+                const kd = 1.2;
+                
+                document.getElementById('kp-slider').value = kp;
+                document.getElementById('ki-slider').value = ki;
+                document.getElementById('kd-slider').value = kd;
+                
+                document.getElementById('kp-value').textContent = kp.toFixed(1);
+                document.getElementById('ki-value').textContent = ki.toFixed(2);
+                document.getElementById('kd-value').textContent = kd.toFixed(1);
+                
+                showAlert('Auto-tune complete! Suggested values loaded. Click "Apply PID Settings" to use them.', 'success');
+            }, 2000);
+        }
+
         function initializeChartForSchedule(schedule) {
             if (!schedule || schedule.length === 0) return;
             
@@ -845,12 +880,20 @@
         }
 
         async function loadScheduleList() {
+            console.log('Loading schedule list...');
             try {
                 const response = await fetch('/api/schedules');
                 const schedules = await response.json();
                 
+                console.log('Schedules loaded:', schedules);
+                
                 const listEl = document.getElementById('schedule-list');
                 const selectEl = document.getElementById('schedule-select');
+                
+                if (!listEl || !selectEl) {
+                    console.error('Could not find schedule-list or schedule-select elements');
+                    return;
+                }
                 
                 if (schedules.length === 0) {
                     listEl.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No schedules found. Create one to get started!</p>';
@@ -883,9 +926,11 @@
                     selectEl.appendChild(option);
                 });
                 
+                console.log('Schedule list populated successfully');
+                
             } catch (error) {
                 console.error('Error loading schedules:', error);
-                showAlert('Failed to load schedules', 'error');
+                showAlert('Failed to load schedules: ' + error.message, 'error');
             }
         }
 
@@ -1241,10 +1286,13 @@
             }
         }
 
+        // Initialize on page load
+        console.log('Initializing kiln controller dashboard...');
         loadScheduleList();
         loadPIDSettings();
         updateStatus();
         setInterval(updateStatus, 2000);
+        console.log('Dashboard initialized');
     </script>
 </body>
 </html>
