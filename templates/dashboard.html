@@ -766,26 +766,44 @@
                 return;
             }
             
-            showAlert('Auto-tune started! Monitor the temperature graph. This will take 15-20 minutes...', 'success');
+            showAlert('Auto-tune started! Heating kiln and analyzing response. This will take 15-20 minutes. Watch the temperature graph.', 'success');
             
-            // Simple Ziegler-Nichols-inspired auto-tune
-            // This is a placeholder - you'd implement a proper relay-based auto-tune
-            setTimeout(() => {
-                // These are conservative starting values for a kiln
-                const kp = 0.8;
-                const ki = 0.05;
-                const kd = 1.2;
+            try {
+                const response = await fetch('/api/autotune', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_temp: 100, test_duration: 900 })
+                });
                 
-                document.getElementById('kp-slider').value = kp;
-                document.getElementById('ki-slider').value = ki;
-                document.getElementById('kd-slider').value = kd;
+                const data = await response.json();
                 
-                document.getElementById('kp-value').textContent = kp.toFixed(1);
-                document.getElementById('ki-value').textContent = ki.toFixed(2);
-                document.getElementById('kd-value').textContent = kd.toFixed(1);
-                
-                showAlert('Auto-tune complete! Suggested values loaded. Click "Apply PID Settings" to use them.', 'success');
-            }, 2000);
+                if (data.success) {
+                    showAlert(data.message + ' Monitor the temperature graph.', 'success');
+                    
+                    // Poll for completion
+                    const checkInterval = setInterval(async () => {
+                        try {
+                            const statusResponse = await fetch('/api/status');
+                            const statusData = await statusResponse.json();
+                            
+                            if (!statusData.autotune_active) {
+                                clearInterval(checkInterval);
+                                
+                                // Reload PID settings
+                                await loadPIDSettings();
+                                showAlert('Auto-tune complete! New PID values have been loaded and saved.', 'success');
+                            }
+                        } catch (error) {
+                            console.error('Error checking autotune status:', error);
+                        }
+                    }, 5000); // Check every 5 seconds
+                    
+                } else {
+                    showAlert('Error: ' + (data.error || 'Failed to start auto-tune'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to start auto-tune: ' + error.message, 'error');
+            }
         }
 
         function initializeChartForSchedule(schedule) {
@@ -1240,7 +1258,12 @@
                 const startBtn = document.getElementById('start-btn');
                 const stopBtn = document.getElementById('stop-btn');
                 
-                if (data.emergency_stop) {
+                if (data.autotune_active) {
+                    statusIndicator.className = 'status-indicator active';
+                    statusText.textContent = 'Auto-Tuning PID';
+                    startBtn.disabled = true;
+                    stopBtn.disabled = true;
+                } else if (data.emergency_stop) {
                     statusIndicator.className = 'status-indicator emergency';
                     statusText.textContent = 'EMERGENCY STOP';
                     startBtn.disabled = true;

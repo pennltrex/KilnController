@@ -443,7 +443,8 @@ class KilnController:
                 'timestamp': datetime.now().isoformat(),
                 'pid_kp': self.pid.Kp,
                 'pid_ki': self.pid.Ki,
-                'pid_kd': self.pid.Kd
+                'pid_kd': self.pid.Kd,
+                'autotune_active': getattr(self, 'autotune_active', False)
             }
     
     def set_pid_tunings(self, kp, ki, kd):
@@ -455,6 +456,126 @@ class KilnController:
         save_config(self.config)
         logging.info(f"PID tunings updated and saved: Kp={kp}, Ki={ki}, Kd={kd}")
         return True
+    
+    def autotune_pid(self, target_temp=100, test_duration=900):
+        """
+        Auto-tune PID using relay method (Ziegler-Nichols)
+        
+        Args:
+            target_temp: Temperature to heat to for testing (default 100°C)
+            test_duration: Maximum test duration in seconds (default 15 min)
+        """
+        self.autotune_active = True
+        logging.info(f"Starting PID auto-tune: target={target_temp}°C, duration={test_duration}s")
+        
+        try:
+            # Heat to target with relay control
+            start_time = time.time()
+            temps = []
+            times = []
+            
+            # Phase 1: Heat up with relay on
+            logging.info("Auto-tune Phase 1: Heating")
+            while time.time() - start_time < test_duration / 2:
+                current_temp = self.read_temperature()
+                if current_temp is None:
+                    logging.error("Auto-tune failed: cannot read temperature")
+                    return None
+                
+                temps.append(current_temp)
+                times.append(time.time() - start_time)
+                
+                if current_temp >= target_temp:
+                    break
+                
+                # Full power heating
+                self.relay.value = True
+                time.sleep(2)
+            
+            self.relay.value = False
+            peak_temp = max(temps) if temps else target_temp
+            
+            # Phase 2: Let it cool slightly and oscillate
+            logging.info("Auto-tune Phase 2: Oscillation detection")
+            oscillation_data = []
+            relay_state = False
+            
+            while time.time() - start_time < test_duration:
+                current_temp = self.read_temperature()
+                if current_temp is None:
+                    break
+                
+                elapsed = time.time() - start_time
+                oscillation_data.append((elapsed, current_temp))
+                
+                # Simple relay control around target
+                if current_temp < target_temp - 5:
+                    relay_state = True
+                elif current_temp > target_temp + 5:
+                    relay_state = False
+                
+                self.relay.value = relay_state
+                time.sleep(2)
+                
+                # Stop if we have enough data (3+ oscillations)
+                if len(oscillation_data) > 60:  # ~2 minutes of data
+                    break
+            
+            self.relay.value = False
+            
+            # Analyze oscillations to find period and amplitude
+            if len(oscillation_data) < 20:
+                logging.error("Auto-tune failed: insufficient data")
+                return None
+            
+            # Simple peak detection
+            temps_only = [t[1] for t in oscillation_data]
+            peaks = []
+            for i in range(1, len(temps_only) - 1):
+                if temps_only[i] > temps_only[i-1] and temps_only[i] > temps_only[i+1]:
+                    peaks.append(i)
+            
+            if len(peaks) < 2:
+                logging.warning("Auto-tune: could not detect oscillations, using conservative defaults")
+                # Conservative defaults for kilns
+                return (0.8, 0.05, 1.2)
+            
+            # Calculate oscillation period
+            peak_times = [oscillation_data[p][0] for p in peaks]
+            periods = [peak_times[i+1] - peak_times[i] for i in range(len(peak_times)-1)]
+            avg_period = sum(periods) / len(periods) if periods else 60
+            
+            # Calculate oscillation amplitude
+            peak_temps = [temps_only[p] for p in peaks]
+            amplitude = (max(peak_temps) - min(peak_temps)) / 2 if len(peak_temps) > 1 else 10
+            
+            # Ziegler-Nichols tuning (conservative for kilns)
+            # Ultimate gain estimation
+            Ku = 4.0 / (3.14159 * amplitude) * 100  # Relay amplitude = 100%
+            Tu = avg_period
+            
+            # Conservative PID settings (60% of Z-N recommendations for high thermal mass)
+            Kp = 0.45 * Ku
+            Ki = 0.54 * Ku / Tu
+            Kd = 0.075 * Ku * Tu
+            
+            # Clamp values to reasonable ranges for kilns
+            Kp = max(0.1, min(3.0, Kp))
+            Ki = max(0.01, min(1.0, Ki))
+            Kd = max(0.1, min(2.0, Kd))
+            
+            logging.info(f"Auto-tune results: Kp={Kp:.2f}, Ki={Ki:.3f}, Kd={Kd:.2f}")
+            logging.info(f"Oscillation: Period={Tu:.1f}s, Amplitude={amplitude:.1f}°C")
+            
+            return (round(Kp, 1), round(Ki, 2), round(Kd, 1))
+            
+        except Exception as e:
+            logging.error(f"Auto-tune error: {e}")
+            return None
+        finally:
+            self.relay.value = False
+            self.autotune_active = False
+            logging.info("Auto-tune complete")
     
     def get_data_log(self, limit=100):
         """Get recent data log entries"""
@@ -620,6 +741,35 @@ def handle_pid():
         if kiln.set_pid_tunings(kp, ki, kd):
             return jsonify({'success': True, 'message': 'PID tunings updated'})
         return jsonify({'error': 'Failed to update PID tunings'}), 500
+
+@app.route('/api/autotune', methods=['POST'])
+def autotune_pid():
+    """Run PID auto-tune"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+    
+    if kiln.firing_active:
+        return jsonify({'error': 'Cannot auto-tune while firing'}), 400
+    
+    data = request.json or {}
+    target_temp = data.get('target_temp', 100)
+    test_duration = data.get('test_duration', 900)
+    
+    # Run auto-tune in separate thread
+    def run_autotune():
+        result = kiln.autotune_pid(target_temp, test_duration)
+        if result:
+            kp, ki, kd = result
+            kiln.set_pid_tunings(kp, ki, kd)
+    
+    autotune_thread = threading.Thread(target=run_autotune)
+    autotune_thread.daemon = True
+    autotune_thread.start()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Auto-tune started: heating to {target_temp}°C for up to {test_duration/60:.0f} minutes'
+    })
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
