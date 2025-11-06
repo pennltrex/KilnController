@@ -828,16 +828,21 @@ def handle_resume():
         # Resume from saved state
         state = kiln.load_state()
         if not state:
+            logging.error("Resume requested but no saved state found")
             return jsonify({'error': 'No saved state found'}), 404
         
         if kiln.firing_active:
-            return jsonify({'error': 'Firing already active'}), 400
+            logging.warning("Resume requested but firing already active")
+            return jsonify({'error': 'Firing already active', 'detail': 'A firing cycle is already running'}), 400
+        
+        logging.info("Starting resume process")
         
         # Resume in a separate thread
         resume_thread = threading.Thread(target=kiln.resume_firing, args=(state,))
         resume_thread.daemon = True
         resume_thread.start()
         
+        logging.info("Resume thread started")
         return jsonify({'success': True, 'message': 'Firing resumed'})
 
 @app.route('/api/history', methods=['GET'])

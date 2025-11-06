@@ -725,14 +725,17 @@
                 const response = await fetch('/api/resume', { method: 'POST' });
                 const data = await response.json();
                 
-                if (data.success) {
+                if (response.ok && data.success) {
                     document.getElementById('resume-dialog').style.display = 'none';
                     showAlert('Firing resumed successfully', 'success');
                     await loadHistory();
                 } else {
-                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                    const errorMsg = data.error || 'Unknown error';
+                    console.error('Resume failed:', errorMsg);
+                    showAlert('Failed to resume: ' + errorMsg, 'error');
                 }
             } catch (error) {
+                console.error('Resume error:', error);
                 showAlert('Failed to resume firing: ' + error.message, 'error');
             }
         }
