@@ -1,0 +1,26 @@
+{
+    "hardware": {
+        "relay_pin": 23,
+        "thermocouple_cs_pin": "D5",
+        "thermocouple_type": "K"
+    },
+    "safety": {
+        "max_temp": 1300,
+        "safety_margin": 50
+    },
+    "pid": {
+        "kp": 0.42,
+        "ki": 0.01,
+        "kd": 2.0,
+        "sample_time": 1.0,
+        "output_limits": [0, 100]
+    },
+    "control": {
+        "relay_cycle_time": 10.0,
+        "temp_update_interval": 2.0
+    },
+    "web": {
+        "host": "0.0.0.0",
+        "port": 5000
+    }
+}

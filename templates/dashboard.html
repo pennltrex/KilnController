@@ -31,21 +31,6 @@
             margin-bottom: 30px;
             font-size: 2.5em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-            position: relative;
-        }
-        
-        h1 button {
-            position: absolute;
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 0.4em;
-            padding: 8px 16px;
-        }
-        
-        h3 {
-            color: #667eea;
-            margin-bottom: 10px;
         }
 
         .dashboard {
@@ -396,14 +381,6 @@
                 font-size: 1.8em;
             }
             
-            h1 button {
-                position: static;
-                transform: none;
-                display: block;
-                margin: 15px auto 0;
-                float: none;
-            }
-            
             .temp-display {
                 font-size: 2.5em;
             }
@@ -411,102 +388,14 @@
             .dashboard {
                 grid-template-columns: 1fr;
             }
-            
-            #settings-modal > .card {
-                margin: 20px auto;
-            }
-            
-            #settings-modal > .card > div[style*="grid"] {
-                grid-template-columns: 1fr !important;
-            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔥 Kiln Controller Dashboard <button class="btn-small" onclick="showSettings()" style="float: right; margin-top: 10px;">⚙️ Settings</button></h1>
+        <h1>🔥 Kiln Controller Dashboard</h1>
         
         <div id="alert" class="alert"></div>
-        
-        <!-- Resume Dialog -->
-        <div id="resume-dialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; padding: 20px;">
-            <div class="card" style="max-width: 500px; margin: 100px auto;">
-                <h2 style="color: #ef4444;">⚠️ Interrupted Firing Detected</h2>
-                <p style="margin: 20px 0; color: #666;">
-                    A firing was in progress before the system restarted. Would you like to resume where it left off?
-                </p>
-                <div id="resume-info" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 0.9em;">
-                    <!-- Info will be inserted here -->
-                </div>
-                <div class="controls">
-                    <button class="btn-primary" onclick="resumeFiring()">
-                        Resume Firing
-                    </button>
-                    <button class="btn-danger" onclick="discardState()">
-                        Discard & Start Fresh
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Settings Modal -->
-        <div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; padding: 20px; overflow-y: auto;" onclick="if(event.target.id==='settings-modal') closeSettings()">
-            <div class="card" style="max-width: 800px; margin: 50px auto;">
-                <h2>⚙️ Settings</h2>
-                
-                <h3 style="margin-top: 20px; color: #667eea;">PID Tuning</h3>
-                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
-                    Adjust PID parameters to control temperature response
-                </p>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                    <div>
-                        <div class="input-group" style="margin-bottom: 15px;">
-                            <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
-                            <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
-                        </div>
-                        <div class="input-group" style="margin-bottom: 15px;">
-                            <label>Ki (Integral): <span id="ki-value">0.1</span></label>
-                            <input type="range" id="ki-slider" min="0" max="2.0" step="0.05" value="0.1" style="width: 100%;">
-                        </div>
-                        <div class="input-group" style="margin-bottom: 15px;">
-                            <label>Kd (Derivative): <span id="kd-value">0.5</span></label>
-                            <input type="range" id="kd-slider" min="0" max="3.0" step="0.1" value="0.5" style="width: 100%;">
-                        </div>
-                        <button class="btn-primary" onclick="updatePID()" style="width: 100%;">
-                            Apply PID Settings
-                        </button>
-                    </div>
-                    
-                    <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                        <strong style="color: #667eea;">Quick Guide:</strong>
-                        <ul style="margin: 10px 0; padding-left: 20px; font-size: 0.9em; color: #666;">
-                            <li><strong>Overshoot?</strong> Decrease Kp, increase Kd</li>
-                            <li><strong>Too slow?</strong> Increase Kp</li>
-                            <li><strong>Steady error?</strong> Increase Ki</li>
-                            <li><strong>Oscillating?</strong> Decrease Kp and Ki</li>
-                        </ul>
-                        
-                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
-                            <strong style="color: #667eea;">Auto-Tune</strong>
-                            <p style="font-size: 0.85em; color: #666; margin: 8px 0;">
-                                Automatically determine optimal PID settings by running a test heating cycle.
-                            </p>
-                            <button class="btn-primary" onclick="startAutoTune()" id="autotune-btn" style="width: 100%; margin-top: 10px;">
-                                Start Auto-Tune
-                            </button>
-                            <div id="autotune-status" style="margin-top: 10px; font-size: 0.85em; color: #666;"></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="controls">
-                    <button class="btn-danger" onclick="closeSettings()">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
         
         <div class="dashboard">
             <div class="card">
@@ -540,6 +429,10 @@
                     <span class="info-label">Last Update:</span>
                     <span class="info-value" id="last-update">--</span>
                 </div>
+                <div class="info-row" style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #f0f0f0;">
+                    <span class="info-label" style="font-size: 0.85em;">PID:</span>
+                    <span class="info-value" style="font-size: 0.85em;" id="pid-display">Kp:-- Ki:-- Kd:--</span>
+                </div>
             </div>
 
             <div class="card">
@@ -571,6 +464,35 @@
                 <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
                     ⚠️ Select a schedule before starting
                 </p>
+            </div>
+
+            <div class="card">
+                <h2>PID Tuning</h2>
+                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                    Adjust these values to fine-tune temperature control
+                </p>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
+                    <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
+                </div>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label>Ki (Integral): <span id="ki-value">0.1</span></label>
+                    <input type="range" id="ki-slider" min="0" max="2.0" step="0.05" value="0.1" style="width: 100%;">
+                </div>
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <label>Kd (Derivative): <span id="kd-value">0.5</span></label>
+                    <input type="range" id="kd-slider" min="0" max="3.0" step="0.1" value="0.5" style="width: 100%;">
+                </div>
+                <button class="btn-primary" onclick="updatePID()" style="width: 100%;">
+                    Apply PID Settings
+                </button>
+                <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                    <strong>Quick Guide:</strong><br>
+                    • <strong>Overshoot?</strong> Decrease Kp, increase Kd<br>
+                    • <strong>Too slow?</strong> Increase Kp<br>
+                    • <strong>Steady error?</strong> Increase Ki<br>
+                    • <strong>Oscillating?</strong> Decrease Kp and Ki
+                </div>
             </div>
 
             <div class="card">
@@ -698,84 +620,6 @@
         let scheduleMaxTemp = 0;
         let scheduleTotalMinutes = 0;
         let chartTimeInterval = 10;
-        let historyLoaded = false;
-
-        async function checkForSavedState() {
-            try {
-                const response = await fetch('/api/resume');
-                const data = await response.json();
-                
-                if (data.has_saved_state) {
-                    const resumeInfo = document.getElementById('resume-info');
-                    resumeInfo.innerHTML = `
-                        <strong>Firing Details:</strong><br>
-                        Segments: ${data.schedule_length}<br>
-                        Current Segment: ${data.current_segment + 1}<br>
-                        Elapsed Time: ${Math.round(data.elapsed_minutes)} minutes
-                    `;
-                    document.getElementById('resume-dialog').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Error checking for saved state:', error);
-            }
-        }
-
-        async function resumeFiring() {
-            try {
-                const response = await fetch('/api/resume', { method: 'POST' });
-                const data = await response.json();
-                
-                if (response.ok && data.success) {
-                    document.getElementById('resume-dialog').style.display = 'none';
-                    showAlert('Firing resumed successfully', 'success');
-                    await loadHistory();
-                } else {
-                    const errorMsg = data.error || 'Unknown error';
-                    console.error('Resume failed:', errorMsg);
-                    showAlert('Failed to resume: ' + errorMsg, 'error');
-                }
-            } catch (error) {
-                console.error('Resume error:', error);
-                showAlert('Failed to resume firing: ' + error.message, 'error');
-            }
-        }
-
-        async function discardState() {
-            document.getElementById('resume-dialog').style.display = 'none';
-            showAlert('Saved state discarded', 'success');
-        }
-
-        async function loadHistory() {
-            if (historyLoaded) return;
-            
-            try {
-                const response = await fetch('/api/history');
-                const data = await response.json();
-                
-                if (data.data && data.data.length > 0) {
-                    historyLoaded = true;
-                    
-                    console.log(`Loading ${data.data.length} historical data points`);
-                    
-                    // Clear existing real-time data first
-                    const labelsCount = chart.data.labels.length;
-                    chart.data.datasets[0].data = new Array(labelsCount).fill(null);
-                    chart.data.datasets[1].data = new Array(labelsCount).fill(null);
-                    
-                    // Populate chart with all historical data
-                    data.data.forEach(entry => {
-                        if (scheduleStartTime && loadedScheduleData) {
-                            updateChart(entry.time, entry.temp, entry.setpoint);
-                        }
-                    });
-                    
-                    chart.update();
-                    console.log('Historical data loaded successfully');
-                }
-            } catch (error) {
-                console.error('Error loading history:', error);
-            }
-        }
 
         // PID slider update handlers
         document.getElementById('kp-slider').addEventListener('input', function(e) {
@@ -829,67 +673,6 @@
             } catch (error) {
                 console.error('Failed to load PID settings:', error);
             }
-        }
-        
-        function showSettings() {
-            document.getElementById('settings-modal').style.display = 'block';
-            loadPIDSettings();
-        }
-        
-        function closeSettings() {
-            document.getElementById('settings-modal').style.display = 'none';
-        }
-        
-        async function startAutoTune() {
-            if (!confirm('Auto-tune will heat your kiln to approximately 100°C over 15-20 minutes to determine optimal PID settings. Make sure the kiln is safe to operate. Continue?')) {
-                return;
-            }
-            
-            const autotuneBtn = document.getElementById('autotune-btn');
-            const autotuneStatus = document.getElementById('autotune-status');
-            
-            autotuneBtn.disabled = true;
-            autotuneBtn.textContent = 'Auto-Tuning...';
-            autotuneStatus.innerHTML = '<div style="color: #667eea;">⏳ Running auto-tune test... This will take 15-20 minutes.</div>';
-            
-            try {
-                const response = await fetch('/api/autotune', { method: 'POST' });
-                const data = await response.json();
-                
-                if (data.success) {
-                    autotuneStatus.innerHTML = `
-                        <div style="color: #4ade80; margin-bottom: 10px;">✓ Auto-tune complete!</div>
-                        <div style="background: white; padding: 10px; border-radius: 6px; font-size: 0.9em;">
-                            <strong>Suggested settings:</strong><br>
-                            Kp: ${data.kp.toFixed(2)}<br>
-                            Ki: ${data.ki.toFixed(2)}<br>
-                            Kd: ${data.kd.toFixed(2)}
-                        </div>
-                        <button class="btn-primary" onclick="applySuggestedPID(${data.kp}, ${data.ki}, ${data.kd})" style="width: 100%; margin-top: 10px;">
-                            Apply Suggested Settings
-                        </button>
-                    `;
-                } else {
-                    autotuneStatus.innerHTML = `<div style="color: #ef4444;">❌ Auto-tune failed: ${data.error}</div>`;
-                }
-            } catch (error) {
-                autotuneStatus.innerHTML = `<div style="color: #ef4444;">❌ Error: ${error.message}</div>`;
-            } finally {
-                autotuneBtn.disabled = false;
-                autotuneBtn.textContent = 'Start Auto-Tune';
-            }
-        }
-        
-        async function applySuggestedPID(kp, ki, kd) {
-            document.getElementById('kp-slider').value = kp;
-            document.getElementById('ki-slider').value = ki;
-            document.getElementById('kd-slider').value = kd;
-            
-            document.getElementById('kp-value').textContent = kp.toFixed(1);
-            document.getElementById('ki-value').textContent = ki.toFixed(2);
-            document.getElementById('kd-value').textContent = kd.toFixed(1);
-            
-            await updatePID();
         }
 
         function initializeChartForSchedule(schedule) {
@@ -1318,34 +1101,9 @@
                     chart.update();
                 }
                 
-                // Load history when firing is active but history not yet loaded
-                if (isFiring && !historyLoaded && loadedScheduleData) {
-                    loadHistory();
-                }
-                
-                // If firing is active but schedule not loaded, load it from status
-                if (isFiring && !loadedScheduleData && data.schedule && data.schedule.length > 0) {
-                    loadedScheduleData = data.schedule;
-                    scheduleStartTime = new Date(data.start_time * 1000);
-                    scheduleStartTemp = data.segment_start_temp;
-                    
-                    initializeChartForSchedule(data.schedule);
-                    
-                    // Recalculate scheduled line
-                    for (let i = 0; i < chart.data.labels.length; i++) {
-                        const elapsedMinutes = i * chartTimeInterval;
-                        const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
-                        chart.data.datasets[2].data[i] = scheduledTemp;
-                    }
-                    
-                    console.log('Loaded active firing schedule from status');
-                    loadHistory();
-                }
-                
                 if (!isFiring && wasFiring) {
                     scheduleStartTime = null;
                     scheduleStartTemp = null;
-                    historyLoaded = false;
                     console.log('Firing stopped');
                 }
                 
@@ -1379,6 +1137,12 @@
                 document.getElementById('current-segment').textContent = data.current_segment + 1;
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
+                
+                // Update PID display
+                if (data.pid_kp !== undefined) {
+                    document.getElementById('pid-display').textContent = 
+                        `Kp:${data.pid_kp.toFixed(1)} Ki:${data.pid_ki.toFixed(2)} Kd:${data.pid_kd.toFixed(1)}`;
+                }
                 
                 if (data.temperature !== null && isFiring) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
@@ -1434,7 +1198,6 @@
 
         loadScheduleList();
         loadPIDSettings();
-        checkForSavedState();
         updateStatus();
         setInterval(updateStatus, 2000);
     </script>
