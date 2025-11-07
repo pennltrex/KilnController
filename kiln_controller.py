@@ -885,6 +885,26 @@ def get_config():
         return jsonify(kiln.config)
     return jsonify({'error': 'Kiln not initialized'}), 500
 
+@app.route('/api/current-firing', methods=['GET'])
+def get_current_firing():
+    """Get current firing information if a firing is active"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    if not kiln.firing_active:
+        return jsonify({'firing_active': False})
+
+    # Return current firing information
+    return jsonify({
+        'firing_active': True,
+        'schedule_name': kiln.current_schedule_name,
+        'schedule': kiln.schedule,
+        'data_log': kiln.data_log,
+        'start_time': kiln.start_time,
+        'current_segment': kiln.current_segment,
+        'total_segments': len(kiln.schedule)
+    })
+
 @app.route('/api/resume-check', methods=['GET'])
 def check_resume():
     """Check if there's a saved firing state that can be resumed"""
