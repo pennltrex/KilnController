@@ -28,24 +28,46 @@
         h1 {
             color: white;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             font-size: 2.5em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-            position: relative;
         }
         
-        h1 button {
-            position: absolute;
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 0.4em;
-            padding: 8px 16px;
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
         }
         
-        h3 {
+        .tab-button {
+            padding: 12px 30px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .tab-button.active {
+            background: white;
             color: #667eea;
-            margin-bottom: 10px;
+            border-color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
         }
 
         .dashboard {
@@ -396,14 +418,6 @@
                 font-size: 1.8em;
             }
             
-            h1 button {
-                position: static;
-                transform: none;
-                display: block;
-                margin: 15px auto 0;
-                float: none;
-            }
-            
             .temp-display {
                 font-size: 2.5em;
             }
@@ -411,209 +425,208 @@
             .dashboard {
                 grid-template-columns: 1fr;
             }
-            
-            #settings-modal > .card {
-                margin: 20px auto;
-            }
-            
-            #settings-modal > .card > div[style*="grid"] {
-                grid-template-columns: 1fr !important;
-            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔥 Kiln Controller Dashboard <button class="btn-small" onclick="showSettings()" style="float: right; margin-top: 10px;">⚙️ Settings</button></h1>
+        <h1>🔥 Kiln Controller Dashboard</h1>
+        
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('dashboard')">Dashboard</button>
+            <button class="tab-button" onclick="switchTab('settings')">Settings</button>
+        </div>
         
         <div id="alert" class="alert"></div>
         
-        <!-- Resume Dialog -->
-        <div id="resume-dialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; padding: 20px;">
-            <div class="card" style="max-width: 500px; margin: 100px auto;">
-                <h2 style="color: #ef4444;">⚠️ Interrupted Firing Detected</h2>
-                <p style="margin: 20px 0; color: #666;">
-                    A firing was in progress before the system restarted. Would you like to resume where it left off?
-                </p>
-                <div id="resume-info" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 0.9em;">
-                    <!-- Info will be inserted here -->
+        <div id="dashboard-tab" class="tab-content active">
+            <div class="dashboard">
+                <div class="card">
+                    <h2>Current Status</h2>
+                    <div class="temp-display">
+                        <span id="current-temp">--</span><span class="temp-unit">°C</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Setpoint:</span>
+                        <span class="info-value"><span id="setpoint">--</span>°C</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Output:</span>
+                        <span class="info-value"><span id="output">--</span>%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="output-bar"></div>
+                    </div>
+                    <div class="info-row" style="margin-top: 15px;">
+                        <span class="info-label">Firing Status:</span>
+                        <span class="info-value">
+                            <span class="status-indicator" id="status-indicator"></span>
+                            <span id="firing-status">Idle</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Current Segment:</span>
+                        <span class="info-value"><span id="current-segment">--</span> / <span id="total-segments">--</span></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Last Update:</span>
+                        <span class="info-value" id="last-update">--</span>
+                    </div>
+                    <div class="info-row" style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #f0f0f0;">
+                        <span class="info-label" style="font-size: 0.85em;">PID:</span>
+                        <span class="info-value" style="font-size: 0.85em;" id="pid-display">Kp:-- Ki:-- Kd:--</span>
+                    </div>
                 </div>
-                <div class="controls">
-                    <button class="btn-primary" onclick="resumeFiring()">
-                        Resume Firing
-                    </button>
-                    <button class="btn-danger" onclick="discardState()">
-                        Discard & Start Fresh
-                    </button>
+
+                <div class="card">
+                    <h2>Active Schedule</h2>
+                    <div id="active-schedule-name" style="font-weight: bold; color: #667eea; margin-bottom: 10px;">
+                        No schedule loaded
+                    </div>
+                    <div id="active-schedule-summary" style="color: #666; font-size: 0.9em;">
+                        Select a schedule from the controls section to begin
+                    </div>
                 </div>
-            </div>
-        </div>
-        
-        <!-- Settings Modal -->
-        <div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; padding: 20px; overflow-y: auto;" onclick="if(event.target.id==='settings-modal') closeSettings()">
-            <div class="card" style="max-width: 800px; margin: 50px auto;">
-                <h2>⚙️ Settings</h2>
-                
-                <h3 style="margin-top: 20px; color: #667eea;">PID Tuning</h3>
-                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
-                    Adjust PID parameters to control temperature response
-                </p>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                    <div>
-                        <div class="input-group" style="margin-bottom: 15px;">
-                            <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
-                            <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
+
+                <div class="card" id="resume-card" style="display: none; border: 2px solid #f59e0b; background: #fef3c7;">
+                    <h2 style="color: #f59e0b;">⚠️ Resume Interrupted Firing</h2>
+                    <p style="color: #92400e; margin-bottom: 10px;">
+                        A previous firing was interrupted. You can resume from where it left off.
+                    </p>
+                    <div id="resume-details" style="background: white; padding: 10px; border-radius: 8px; margin: 10px 0;">
+                        <div style="font-size: 0.9em; color: #666;">
+                            <div><strong>Segment:</strong> <span id="resume-segment">--</span></div>
+                            <div><strong>Last saved:</strong> <span id="resume-timestamp">--</span></div>
+                            <div><strong>Elapsed time:</strong> <span id="resume-elapsed">--</span></div>
                         </div>
-                        <div class="input-group" style="margin-bottom: 15px;">
-                            <label>Ki (Integral): <span id="ki-value">0.1</span></label>
-                            <input type="range" id="ki-slider" min="0" max="2.0" step="0.05" value="0.1" style="width: 100%;">
-                        </div>
-                        <div class="input-group" style="margin-bottom: 15px;">
-                            <label>Kd (Derivative): <span id="kd-value">0.5</span></label>
-                            <input type="range" id="kd-slider" min="0" max="3.0" step="0.1" value="0.5" style="width: 100%;">
-                        </div>
-                        <button class="btn-primary" onclick="updatePID()" style="width: 100%;">
-                            Apply PID Settings
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" onclick="resumeFiring()">
+                            Resume Firing
+                        </button>
+                        <button class="btn-danger btn-small" onclick="clearResumeState()">
+                            Discard and Start Fresh
                         </button>
                     </div>
-                    
-                    <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                        <strong style="color: #667eea;">Quick Guide:</strong>
-                        <ul style="margin: 10px 0; padding-left: 20px; font-size: 0.9em; color: #666;">
-                            <li><strong>Overshoot?</strong> Decrease Kp, increase Kd</li>
-                            <li><strong>Too slow?</strong> Increase Kp</li>
-                            <li><strong>Steady error?</strong> Increase Ki</li>
-                            <li><strong>Oscillating?</strong> Decrease Kp and Ki</li>
-                        </ul>
-                        
-                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
-                            <strong style="color: #667eea;">Auto-Tune</strong>
-                            <p style="font-size: 0.85em; color: #666; margin: 8px 0;">
-                                Automatically determine optimal PID settings by running a test heating cycle.
-                            </p>
-                            <button class="btn-primary" onclick="startAutoTune()" id="autotune-btn" style="width: 100%; margin-top: 10px;">
-                                Start Auto-Tune
-                            </button>
-                            <div id="autotune-status" style="margin-top: 10px; font-size: 0.85em; color: #666;"></div>
-                        </div>
+                </div>
+
+                <div class="card">
+                    <h2>Controls</h2>
+                    <div class="input-group">
+                        <label>Select Firing Schedule:</label>
+                        <select id="schedule-select">
+                            <option value="">-- No schedule loaded --</option>
+                        </select>
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" id="start-btn" onclick="startFiring()" disabled>
+                            Start Firing
+                        </button>
+                        <button class="btn-danger" id="stop-btn" onclick="stopFiring()" disabled>
+                            Emergency Stop
+                        </button>
+                    </div>
+                    <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+                        ⚠️ Select a schedule before starting
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h2>Firing Schedules</h2>
+                    <div class="schedule-list" id="schedule-list">
+                        <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" onclick="showScheduleEditor()">
+                            Create New Schedule
+                        </button>
                     </div>
                 </div>
-                
-                <div class="controls">
-                    <button class="btn-danger" onclick="closeSettings()">
-                        Close
-                    </button>
+
+                <div class="card" id="schedule-editor" style="display: none;">
+                    <h2>Schedule Editor</h2>
+                    <div class="input-group">
+                        <label>Schedule Name:</label>
+                        <input type="text" id="schedule-name" placeholder="e.g., Bisque Cone 04">
+                    </div>
+                    <div class="segment-editor" id="segment-editor">
+                        <!-- Segments will be added here -->
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" onclick="addSegment()">
+                            Add Segment
+                        </button>
+                        <button class="btn-primary" onclick="saveSchedule()">
+                            Save Schedule
+                        </button>
+                        <button class="btn-danger btn-small" onclick="cancelEdit()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card chart-card">
+                    <h2>Temperature History</h2>
+                    <div class="chart-container">
+                        <canvas id="tempChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
         
-        <div class="dashboard">
-            <div class="card">
-                <h2>Current Status</h2>
-                <div class="temp-display">
-                    <span id="current-temp">--</span><span class="temp-unit">°C</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Setpoint:</span>
-                    <span class="info-value"><span id="setpoint">--</span>°C</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Output:</span>
-                    <span class="info-value"><span id="output">--</span>%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="output-bar"></div>
-                </div>
-                <div class="info-row" style="margin-top: 15px;">
-                    <span class="info-label">Firing Status:</span>
-                    <span class="info-value">
-                        <span class="status-indicator" id="status-indicator"></span>
-                        <span id="firing-status">Idle</span>
-                    </span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Current Segment:</span>
-                    <span class="info-value"><span id="current-segment">--</span> / <span id="total-segments">--</span></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Last Update:</span>
-                    <span class="info-value" id="last-update">--</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>Active Schedule</h2>
-                <div id="active-schedule-name" style="font-weight: bold; color: #667eea; margin-bottom: 10px;">
-                    No schedule loaded
-                </div>
-                <div id="active-schedule-summary" style="color: #666; font-size: 0.9em;">
-                    Select a schedule from the controls section to begin
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>Controls</h2>
-                <div class="input-group">
-                    <label>Select Firing Schedule:</label>
-                    <select id="schedule-select">
-                        <option value="">-- No schedule loaded --</option>
-                    </select>
-                </div>
-                <div class="controls">
-                    <button class="btn-primary" id="start-btn" onclick="startFiring()" disabled>
-                        Start Firing
+        <div id="settings-tab" class="tab-content">
+            <div class="dashboard">
+                <div class="card">
+                    <h2>PID Tuning</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Adjust these values to fine-tune temperature control
+                    </p>
+                    
+                    <button class="btn-primary" onclick="autoTunePID()" style="width: 100%; margin-bottom: 20px;">
+                        🎯 Auto-Tune PID
                     </button>
-                    <button class="btn-danger" id="stop-btn" onclick="stopFiring()" disabled>
-                        Emergency Stop
+                    <p style="color: #666; font-size: 0.85em; margin-bottom: 15px; text-align: center;">
+                        Or adjust manually:
+                    </p>
+                    
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
+                        <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Ki (Integral): <span id="ki-value">0.1</span></label>
+                        <input type="range" id="ki-slider" min="0" max="2.0" step="0.05" value="0.1" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Kd (Derivative): <span id="kd-value">0.5</span></label>
+                        <input type="range" id="kd-slider" min="0" max="3.0" step="0.1" value="0.5" style="width: 100%;">
+                    </div>
+                    <button class="btn-primary" onclick="updatePID()" style="width: 100%;">
+                        Apply PID Settings
                     </button>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                        <strong>Quick Guide:</strong><br>
+                        • <strong>Overshoot?</strong> Decrease Kp, increase Kd<br>
+                        • <strong>Too slow?</strong> Increase Kp<br>
+                        • <strong>Steady error?</strong> Increase Ki<br>
+                        • <strong>Oscillating?</strong> Decrease Kp and Ki
+                    </div>
                 </div>
-                <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
-                    ⚠️ Select a schedule before starting
-                </p>
-            </div>
-
-            <div class="card">
-                <h2>Firing Schedules</h2>
-                <div class="schedule-list" id="schedule-list">
-                    <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
-                </div>
-                <div class="controls">
-                    <button class="btn-primary" onclick="showScheduleEditor()">
-                        Create New Schedule
-                    </button>
-                </div>
-            </div>
-
-            <div class="card" id="schedule-editor" style="display: none;">
-                <h2>Schedule Editor</h2>
-                <div class="input-group">
-                    <label>Schedule Name:</label>
-                    <input type="text" id="schedule-name" placeholder="e.g., Bisque Cone 04">
-                </div>
-                <div class="segment-editor" id="segment-editor">
-                    <!-- Segments will be added here -->
-                </div>
-                <div class="controls">
-                    <button class="btn-primary" onclick="addSegment()">
-                        Add Segment
-                    </button>
-                    <button class="btn-primary" onclick="saveSchedule()">
-                        Save Schedule
-                    </button>
-                    <button class="btn-danger btn-small" onclick="cancelEdit()">
-                        Cancel
-                    </button>
-                </div>
-            </div>
-
-            <div class="card chart-card">
-                <h2>Temperature History</h2>
-                <div class="chart-container">
-                    <canvas id="tempChart"></canvas>
+                
+                <div class="card">
+                    <h2>Configuration</h2>
+                    <p style="color: #666; font-size: 0.9em;">
+                        Current PID settings are saved automatically when you apply changes. 
+                        For other configuration options, edit <code>config.json</code> on the Raspberry Pi.
+                    </p>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                        <strong>Configuration File Location:</strong><br>
+                        <code>~/KilnController/config.json</code>
+                    </div>
                 </div>
             </div>
         </div>
+        
     </div>
 
     <script>
@@ -689,7 +702,6 @@
             }
         });
 
-        const maxDataPoints = 100;
         let currentScheduleName = '';
         let editingSchedule = false;
         let scheduleStartTime = null;
@@ -698,83 +710,23 @@
         let scheduleMaxTemp = 0;
         let scheduleTotalMinutes = 0;
         let chartTimeInterval = 10;
-        let historyLoaded = false;
 
-        async function checkForSavedState() {
-            try {
-                const response = await fetch('/api/resume');
-                const data = await response.json();
-                
-                if (data.has_saved_state) {
-                    const resumeInfo = document.getElementById('resume-info');
-                    resumeInfo.innerHTML = `
-                        <strong>Firing Details:</strong><br>
-                        Segments: ${data.schedule_length}<br>
-                        Current Segment: ${data.current_segment + 1}<br>
-                        Elapsed Time: ${Math.round(data.elapsed_minutes)} minutes
-                    `;
-                    document.getElementById('resume-dialog').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Error checking for saved state:', error);
-            }
-        }
-
-        async function resumeFiring() {
-            try {
-                const response = await fetch('/api/resume', { method: 'POST' });
-                const data = await response.json();
-                
-                if (response.ok && data.success) {
-                    document.getElementById('resume-dialog').style.display = 'none';
-                    showAlert('Firing resumed successfully', 'success');
-                    await loadHistory();
-                } else {
-                    const errorMsg = data.error || 'Unknown error';
-                    console.error('Resume failed:', errorMsg);
-                    showAlert('Failed to resume: ' + errorMsg, 'error');
-                }
-            } catch (error) {
-                console.error('Resume error:', error);
-                showAlert('Failed to resume firing: ' + error.message, 'error');
-            }
-        }
-
-        async function discardState() {
-            document.getElementById('resume-dialog').style.display = 'none';
-            showAlert('Saved state discarded', 'success');
-        }
-
-        async function loadHistory() {
-            if (historyLoaded) return;
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
             
-            try {
-                const response = await fetch('/api/history');
-                const data = await response.json();
-                
-                if (data.data && data.data.length > 0) {
-                    historyLoaded = true;
-                    
-                    console.log(`Loading ${data.data.length} historical data points`);
-                    
-                    // Clear existing real-time data first
-                    const labelsCount = chart.data.labels.length;
-                    chart.data.datasets[0].data = new Array(labelsCount).fill(null);
-                    chart.data.datasets[1].data = new Array(labelsCount).fill(null);
-                    
-                    // Populate chart with all historical data
-                    data.data.forEach(entry => {
-                        if (scheduleStartTime && loadedScheduleData) {
-                            updateChart(entry.time, entry.temp, entry.setpoint);
-                        }
-                    });
-                    
-                    chart.update();
-                    console.log('Historical data loaded successfully');
-                }
-            } catch (error) {
-                console.error('Error loading history:', error);
-            }
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Activate button
+            event.target.classList.add('active');
         }
 
         // PID slider update handlers
@@ -830,66 +782,50 @@
                 console.error('Failed to load PID settings:', error);
             }
         }
-        
-        function showSettings() {
-            document.getElementById('settings-modal').style.display = 'block';
-            loadPIDSettings();
-        }
-        
-        function closeSettings() {
-            document.getElementById('settings-modal').style.display = 'none';
-        }
-        
-        async function startAutoTune() {
-            if (!confirm('Auto-tune will heat your kiln to approximately 100°C over 15-20 minutes to determine optimal PID settings. Make sure the kiln is safe to operate. Continue?')) {
+
+        async function autoTunePID() {
+            if (!confirm('Auto-tune will heat the kiln to about 100°C and analyze the response. This will take approximately 15-20 minutes. Continue?')) {
                 return;
             }
             
-            const autotuneBtn = document.getElementById('autotune-btn');
-            const autotuneStatus = document.getElementById('autotune-status');
-            
-            autotuneBtn.disabled = true;
-            autotuneBtn.textContent = 'Auto-Tuning...';
-            autotuneStatus.innerHTML = '<div style="color: #667eea;">⏳ Running auto-tune test... This will take 15-20 minutes.</div>';
+            showAlert('Auto-tune started! Heating kiln and analyzing response. This will take 15-20 minutes. Watch the temperature graph.', 'success');
             
             try {
-                const response = await fetch('/api/autotune', { method: 'POST' });
+                const response = await fetch('/api/autotune', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_temp: 100, test_duration: 900 })
+                });
+                
                 const data = await response.json();
                 
                 if (data.success) {
-                    autotuneStatus.innerHTML = `
-                        <div style="color: #4ade80; margin-bottom: 10px;">✓ Auto-tune complete!</div>
-                        <div style="background: white; padding: 10px; border-radius: 6px; font-size: 0.9em;">
-                            <strong>Suggested settings:</strong><br>
-                            Kp: ${data.kp.toFixed(2)}<br>
-                            Ki: ${data.ki.toFixed(2)}<br>
-                            Kd: ${data.kd.toFixed(2)}
-                        </div>
-                        <button class="btn-primary" onclick="applySuggestedPID(${data.kp}, ${data.ki}, ${data.kd})" style="width: 100%; margin-top: 10px;">
-                            Apply Suggested Settings
-                        </button>
-                    `;
+                    showAlert(data.message + ' Monitor the temperature graph.', 'success');
+                    
+                    // Poll for completion
+                    const checkInterval = setInterval(async () => {
+                        try {
+                            const statusResponse = await fetch('/api/status');
+                            const statusData = await statusResponse.json();
+                            
+                            if (!statusData.autotune_active) {
+                                clearInterval(checkInterval);
+                                
+                                // Reload PID settings
+                                await loadPIDSettings();
+                                showAlert('Auto-tune complete! New PID values have been loaded and saved.', 'success');
+                            }
+                        } catch (error) {
+                            console.error('Error checking autotune status:', error);
+                        }
+                    }, 5000); // Check every 5 seconds
+                    
                 } else {
-                    autotuneStatus.innerHTML = `<div style="color: #ef4444;">❌ Auto-tune failed: ${data.error}</div>`;
+                    showAlert('Error: ' + (data.error || 'Failed to start auto-tune'), 'error');
                 }
             } catch (error) {
-                autotuneStatus.innerHTML = `<div style="color: #ef4444;">❌ Error: ${error.message}</div>`;
-            } finally {
-                autotuneBtn.disabled = false;
-                autotuneBtn.textContent = 'Start Auto-Tune';
+                showAlert('Failed to start auto-tune: ' + error.message, 'error');
             }
-        }
-        
-        async function applySuggestedPID(kp, ki, kd) {
-            document.getElementById('kp-slider').value = kp;
-            document.getElementById('ki-slider').value = ki;
-            document.getElementById('kd-slider').value = kd;
-            
-            document.getElementById('kp-value').textContent = kp.toFixed(1);
-            document.getElementById('ki-value').textContent = ki.toFixed(2);
-            document.getElementById('kd-value').textContent = kd.toFixed(1);
-            
-            await updatePID();
         }
 
         function initializeChartForSchedule(schedule) {
@@ -1017,12 +953,20 @@
         }
 
         async function loadScheduleList() {
+            console.log('Loading schedule list...');
             try {
                 const response = await fetch('/api/schedules');
                 const schedules = await response.json();
                 
+                console.log('Schedules loaded:', schedules);
+                
                 const listEl = document.getElementById('schedule-list');
                 const selectEl = document.getElementById('schedule-select');
+                
+                if (!listEl || !selectEl) {
+                    console.error('Could not find schedule-list or schedule-select elements');
+                    return;
+                }
                 
                 if (schedules.length === 0) {
                     listEl.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No schedules found. Create one to get started!</p>';
@@ -1055,9 +999,11 @@
                     selectEl.appendChild(option);
                 });
                 
+                console.log('Schedule list populated successfully');
+                
             } catch (error) {
                 console.error('Error loading schedules:', error);
-                showAlert('Failed to load schedules', 'error');
+                showAlert('Failed to load schedules: ' + error.message, 'error');
             }
         }
 
@@ -1318,34 +1264,9 @@
                     chart.update();
                 }
                 
-                // Load history when firing is active but history not yet loaded
-                if (isFiring && !historyLoaded && loadedScheduleData) {
-                    loadHistory();
-                }
-                
-                // If firing is active but schedule not loaded, load it from status
-                if (isFiring && !loadedScheduleData && data.schedule && data.schedule.length > 0) {
-                    loadedScheduleData = data.schedule;
-                    scheduleStartTime = new Date(data.start_time * 1000);
-                    scheduleStartTemp = data.segment_start_temp;
-                    
-                    initializeChartForSchedule(data.schedule);
-                    
-                    // Recalculate scheduled line
-                    for (let i = 0; i < chart.data.labels.length; i++) {
-                        const elapsedMinutes = i * chartTimeInterval;
-                        const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
-                        chart.data.datasets[2].data[i] = scheduledTemp;
-                    }
-                    
-                    console.log('Loaded active firing schedule from status');
-                    loadHistory();
-                }
-                
                 if (!isFiring && wasFiring) {
                     scheduleStartTime = null;
                     scheduleStartTemp = null;
-                    historyLoaded = false;
                     console.log('Firing stopped');
                 }
                 
@@ -1359,7 +1280,12 @@
                 const startBtn = document.getElementById('start-btn');
                 const stopBtn = document.getElementById('stop-btn');
                 
-                if (data.emergency_stop) {
+                if (data.autotune_active) {
+                    statusIndicator.className = 'status-indicator active';
+                    statusText.textContent = 'Auto-Tuning PID';
+                    startBtn.disabled = true;
+                    stopBtn.disabled = true;
+                } else if (data.emergency_stop) {
                     statusIndicator.className = 'status-indicator emergency';
                     statusText.textContent = 'EMERGENCY STOP';
                     startBtn.disabled = true;
@@ -1379,6 +1305,11 @@
                 document.getElementById('current-segment').textContent = data.current_segment + 1;
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
+                
+                if (data.pid_kp !== undefined) {
+                    document.getElementById('pid-display').textContent = 
+                        `Kp:${data.pid_kp.toFixed(1)} Ki:${data.pid_ki.toFixed(2)} Kd:${data.pid_kd.toFixed(1)}`;
+                }
                 
                 if (data.temperature !== null && isFiring) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
@@ -1417,11 +1348,11 @@
             if (!confirm('EMERGENCY STOP: Are you sure you want to stop the firing cycle?')) {
                 return;
             }
-            
+
             try {
                 const response = await fetch('/api/stop', { method: 'POST' });
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showAlert('Firing stopped', 'success');
                 } else {
@@ -1432,11 +1363,98 @@
             }
         }
 
-        loadScheduleList();
-        loadPIDSettings();
-        checkForSavedState();
-        updateStatus();
-        setInterval(updateStatus, 2000);
+        async function checkResumeState() {
+            try {
+                const response = await fetch('/api/resume-check');
+                const data = await response.json();
+
+                if (data.can_resume) {
+                    const resumeCard = document.getElementById('resume-card');
+                    resumeCard.style.display = 'block';
+
+                    const state = data.state;
+                    document.getElementById('resume-segment').textContent =
+                        `${state.segment + 1} / ${state.total_segments}`;
+                    document.getElementById('resume-timestamp').textContent =
+                        new Date(state.timestamp).toLocaleString();
+                    document.getElementById('resume-elapsed').textContent =
+                        formatElapsedTime(state.elapsed_time);
+
+                    console.log('Resume state available:', state);
+                } else {
+                    document.getElementById('resume-card').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error checking resume state:', error);
+            }
+        }
+
+        async function resumeFiring() {
+            if (!confirm('Resume the interrupted firing from where it left off?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/resume', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Firing resumed successfully', 'success');
+                    document.getElementById('resume-card').style.display = 'none';
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to resume firing: ' + error.message, 'error');
+            }
+        }
+
+        async function clearResumeState() {
+            if (!confirm('Discard the saved firing state? This cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/clear-resume', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Resume state cleared', 'success');
+                    document.getElementById('resume-card').style.display = 'none';
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to clear resume state: ' + error.message, 'error');
+            }
+        }
+
+        function formatElapsedTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            }
+            return `${minutes}m`;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing kiln controller dashboard...');
+            console.log('Checking for elements:');
+            console.log('  schedule-list:', document.getElementById('schedule-list'));
+            console.log('  schedule-select:', document.getElementById('schedule-select'));
+            
+            setTimeout(() => {
+                loadScheduleList();
+                loadPIDSettings();
+                checkResumeState();
+            }, 100);
+
+            updateStatus();
+            setInterval(updateStatus, 2000);
+            console.log('Dashboard initialized');
+        });
     </script>
 </body>
 </html>
