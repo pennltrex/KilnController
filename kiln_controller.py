@@ -157,6 +157,7 @@ class KilnController:
         
         # Firing schedule
         self.schedule = []
+        self.current_schedule_name = None  # Track which schedule is loaded
         self.current_segment = 0
         self.firing_active = False
         self.start_time = None
@@ -230,7 +231,7 @@ class KilnController:
             self.relay.value = False
             time.sleep(cycle_time - on_time)
     
-    def load_schedule(self, schedule_file):
+    def load_schedule(self, schedule_file, schedule_name=None):
         """
         Load firing schedule from JSON file
         Format: [
@@ -245,7 +246,11 @@ class KilnController:
         try:
             with open(schedule_file, 'r') as f:
                 self.schedule = json.load(f)
-            logging.info(f"Loaded firing schedule with {len(self.schedule)} segments")
+            # Extract schedule name from file path if not provided
+            if schedule_name is None:
+                schedule_name = os.path.basename(schedule_file).replace('.json', '')
+            self.current_schedule_name = schedule_name
+            logging.info(f"Loaded firing schedule '{schedule_name}' with {len(self.schedule)} segments")
             return True
         except Exception as e:
             logging.error(f"Failed to load schedule: {e}")
@@ -467,6 +472,7 @@ class KilnController:
                 'segment_start_time': self.segment_start_time,
                 'segment_start_temp': self.segment_start_temp,
                 'schedule': self.schedule,
+                'schedule_name': self.current_schedule_name,  # Save the schedule name
                 'emergency_stop': self.emergency_stop,
                 'timestamp': datetime.now().isoformat()
             }
@@ -504,6 +510,7 @@ class KilnController:
         """Resume firing from saved state"""
         try:
             self.schedule = state['schedule']
+            self.current_schedule_name = state.get('schedule_name')  # Restore the schedule name
             self.current_segment = state['current_segment']
             self.start_time = state['start_time']
             self.segment_start_time = state['segment_start_time']
@@ -511,6 +518,7 @@ class KilnController:
             self.emergency_stop = state.get('emergency_stop', False)
 
             logging.info("Firing state restored successfully")
+            logging.info(f"Schedule: {self.current_schedule_name}")
             logging.info(f"Resuming from segment {self.current_segment + 1}/{len(self.schedule)}")
 
             return True
@@ -773,8 +781,8 @@ def load_schedule_endpoint(name):
     """Load a schedule as the active schedule"""
     if not kiln:
         return jsonify({'error': 'Kiln not initialized'}), 500
-    
-    if kiln.load_schedule(f"schedules/{name}.json"):
+
+    if kiln.load_schedule(f"schedules/{name}.json", schedule_name=name):
         return jsonify({'success': True, 'message': f'Schedule {name} loaded'})
     return jsonify({'error': 'Failed to load schedule'}), 500
 
@@ -783,10 +791,11 @@ def handle_schedule():
     """Get or set firing schedule"""
     if not kiln:
         return jsonify({'error': 'Kiln not initialized'}), 500
-    
+
     if request.method == 'POST':
         schedule = request.json
         kiln.schedule = schedule
+        kiln.current_schedule_name = 'Custom'  # Mark as custom schedule
         logging.info(f"Schedule updated via web interface: {len(schedule)} segments")
         return jsonify({'success': True})
     else:
@@ -887,6 +896,7 @@ def check_resume():
         return jsonify({
             'can_resume': True,
             'state': {
+                'schedule_name': state.get('schedule_name', 'Unknown'),
                 'segment': state.get('current_segment'),
                 'total_segments': len(state.get('schedule', [])),
                 'timestamp': state.get('timestamp'),
@@ -923,7 +933,11 @@ def resume_firing():
 
     return jsonify({
         'success': True,
-        'message': f'Firing resumed from segment {state["current_segment"] + 1}/{len(state["schedule"])}'
+        'message': f'Firing resumed from segment {state["current_segment"] + 1}/{len(state["schedule"])}',
+        'schedule_name': state.get('schedule_name'),
+        'schedule': state['schedule'],
+        'data_log': kiln.data_log,
+        'start_time': state['start_time']
     })
 
 @app.route('/api/clear-resume', methods=['POST'])
