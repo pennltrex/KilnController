@@ -469,6 +469,14 @@
                         <span class="info-value"><span id="current-segment">--</span> / <span id="total-segments">--</span></span>
                     </div>
                     <div class="info-row">
+                        <span class="info-label">Elapsed Time:</span>
+                        <span class="info-value" id="elapsed-time">--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Time Remaining:</span>
+                        <span class="info-value" id="time-remaining">--</span>
+                    </div>
+                    <div class="info-row">
                         <span class="info-label">Last Update:</span>
                         <span class="info-value" id="last-update">--</span>
                     </div>
@@ -1170,35 +1178,72 @@
         
         function calculateScheduledTemp(elapsedMinutes, schedule, startTemp) {
             if (!schedule || schedule.length === 0) return null;
-            
+
             let currentTime = 0;
             let currentTemp = startTemp;
-            
+
             for (let i = 0; i < schedule.length; i++) {
                 const segment = schedule[i];
                 const rate = segment.rate / 60;
                 const target = segment.target;
                 const hold = segment.hold;
-                
+
                 const tempDiff = target - currentTemp;
                 const rampTime = Math.abs(tempDiff) / rate;
-                
+
                 if (elapsedMinutes < currentTime + rampTime) {
                     const segmentElapsed = elapsedMinutes - currentTime;
                     return currentTemp + (rate * segmentElapsed * Math.sign(tempDiff));
                 }
-                
+
                 currentTime += rampTime;
                 currentTemp = target;
-                
+
                 if (elapsedMinutes < currentTime + hold) {
                     return target;
                 }
-                
+
                 currentTime += hold;
             }
-            
+
             return currentTemp;
+        }
+
+        function calculateTotalScheduleDuration(schedule, startTemp) {
+            if (!schedule || schedule.length === 0) return 0;
+
+            let totalTime = 0;
+            let currentTemp = startTemp;
+
+            for (let i = 0; i < schedule.length; i++) {
+                const segment = schedule[i];
+                const rate = segment.rate / 60; // Convert to °C/minute
+                const target = segment.target;
+                const hold = segment.hold;
+
+                const tempDiff = target - currentTemp;
+                const rampTime = Math.abs(tempDiff) / rate;
+
+                totalTime += rampTime + hold;
+                currentTemp = target;
+            }
+
+            return totalTime; // Returns total duration in minutes
+        }
+
+        function formatTimeDisplay(minutes) {
+            if (minutes === null || minutes === undefined || minutes < 0) {
+                return '--';
+            }
+
+            const hours = Math.floor(minutes / 60);
+            const mins = Math.floor(minutes % 60);
+
+            if (hours > 0) {
+                return `${hours}h ${mins}m`;
+            } else {
+                return `${mins}m`;
+            }
         }
         
         function updateChart(timestamp, temp, setpoint) {
@@ -1610,9 +1655,32 @@
                 document.getElementById('current-segment').textContent = data.current_segment + 1;
                 document.getElementById('total-segments').textContent = data.total_segments;
                 document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleTimeString();
-                
+
+                // Update elapsed time and time remaining
+                const elapsedTimeElement = document.getElementById('elapsed-time');
+                const timeRemainingElement = document.getElementById('time-remaining');
+
+                if (data.firing_active && data.start_time && data.schedule && data.schedule.length > 0) {
+                    // Calculate elapsed time
+                    const startTime = new Date(data.start_time);
+                    const currentTime = new Date(data.timestamp);
+                    const elapsedMs = currentTime - startTime;
+                    const elapsedMinutes = elapsedMs / (1000 * 60);
+
+                    // Calculate total duration and time remaining
+                    const startTemp = scheduleStartTemp || data.temperature || 20;
+                    const totalDurationMinutes = calculateTotalScheduleDuration(data.schedule, startTemp);
+                    const remainingMinutes = totalDurationMinutes - elapsedMinutes;
+
+                    elapsedTimeElement.textContent = formatTimeDisplay(elapsedMinutes);
+                    timeRemainingElement.textContent = remainingMinutes > 0 ? formatTimeDisplay(remainingMinutes) : '0m';
+                } else {
+                    elapsedTimeElement.textContent = '--';
+                    timeRemainingElement.textContent = '--';
+                }
+
                 if (data.pid_kp !== undefined) {
-                    document.getElementById('pid-display').textContent = 
+                    document.getElementById('pid-display').textContent =
                         `Kp:${data.pid_kp.toFixed(1)} Ki:${data.pid_ki.toFixed(2)} Kd:${data.pid_kd.toFixed(1)}`;
                 }
                 

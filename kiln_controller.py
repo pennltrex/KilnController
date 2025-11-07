@@ -566,7 +566,9 @@ class KilnController:
                 'pid_kp': self.pid.Kp,
                 'pid_ki': self.pid.Ki,
                 'pid_kd': self.pid.Kd,
-                'autotune_active': getattr(self, 'autotune_active', False)
+                'autotune_active': getattr(self, 'autotune_active', False),
+                'start_time': self.start_time.isoformat() if self.start_time else None,
+                'schedule': self.schedule
             }
     
     def set_pid_tunings(self, kp, ki, kd):
