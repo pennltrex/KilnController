@@ -488,6 +488,28 @@
                     </div>
                 </div>
 
+                <div class="card" id="resume-card" style="display: none; border: 2px solid #f59e0b; background: #fef3c7;">
+                    <h2 style="color: #f59e0b;">⚠️ Resume Interrupted Firing</h2>
+                    <p style="color: #92400e; margin-bottom: 10px;">
+                        A previous firing was interrupted. You can resume from where it left off.
+                    </p>
+                    <div id="resume-details" style="background: white; padding: 10px; border-radius: 8px; margin: 10px 0;">
+                        <div style="font-size: 0.9em; color: #666;">
+                            <div><strong>Segment:</strong> <span id="resume-segment">--</span></div>
+                            <div><strong>Last saved:</strong> <span id="resume-timestamp">--</span></div>
+                            <div><strong>Elapsed time:</strong> <span id="resume-elapsed">--</span></div>
+                        </div>
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" onclick="resumeFiring()">
+                            Resume Firing
+                        </button>
+                        <button class="btn-danger btn-small" onclick="clearResumeState()">
+                            Discard and Start Fresh
+                        </button>
+                    </div>
+                </div>
+
                 <div class="card">
                     <h2>Controls</h2>
                     <div class="input-group">
@@ -1326,11 +1348,11 @@
             if (!confirm('EMERGENCY STOP: Are you sure you want to stop the firing cycle?')) {
                 return;
             }
-            
+
             try {
                 const response = await fetch('/api/stop', { method: 'POST' });
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showAlert('Firing stopped', 'success');
                 } else {
@@ -1339,6 +1361,81 @@
             } catch (error) {
                 showAlert('Failed to stop firing: ' + error.message, 'error');
             }
+        }
+
+        async function checkResumeState() {
+            try {
+                const response = await fetch('/api/resume-check');
+                const data = await response.json();
+
+                if (data.can_resume) {
+                    const resumeCard = document.getElementById('resume-card');
+                    resumeCard.style.display = 'block';
+
+                    const state = data.state;
+                    document.getElementById('resume-segment').textContent =
+                        `${state.segment + 1} / ${state.total_segments}`;
+                    document.getElementById('resume-timestamp').textContent =
+                        new Date(state.timestamp).toLocaleString();
+                    document.getElementById('resume-elapsed').textContent =
+                        formatElapsedTime(state.elapsed_time);
+
+                    console.log('Resume state available:', state);
+                } else {
+                    document.getElementById('resume-card').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error checking resume state:', error);
+            }
+        }
+
+        async function resumeFiring() {
+            if (!confirm('Resume the interrupted firing from where it left off?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/resume', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Firing resumed successfully', 'success');
+                    document.getElementById('resume-card').style.display = 'none';
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to resume firing: ' + error.message, 'error');
+            }
+        }
+
+        async function clearResumeState() {
+            if (!confirm('Discard the saved firing state? This cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/clear-resume', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Resume state cleared', 'success');
+                    document.getElementById('resume-card').style.display = 'none';
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to clear resume state: ' + error.message, 'error');
+            }
+        }
+
+        function formatElapsedTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            }
+            return `${minutes}m`;
         }
 
         // Initialize on page load
@@ -1351,8 +1448,9 @@
             setTimeout(() => {
                 loadScheduleList();
                 loadPIDSettings();
+                checkResumeState();
             }, 100);
-            
+
             updateStatus();
             setInterval(updateStatus, 2000);
             console.log('Dashboard initialized');

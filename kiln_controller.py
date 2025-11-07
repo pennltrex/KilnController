@@ -343,60 +343,65 @@ class KilnController:
         if not self.schedule:
             logging.error("No firing schedule loaded")
             return
-        
+
         self.firing_active = True
         self.start_time = time.time()
         self.current_segment = 0
         self.emergency_stop = False
-        
+
         # Initialize segment tracking
         initial_temp = self.read_temperature()
         self.segment_start_time = self.start_time
         self.segment_start_temp = initial_temp if initial_temp else 20.0
-        
+
         logging.info("Starting firing cycle")
         logging.info(f"Schedule loaded with {len(self.schedule)} segments")
         logging.info(f"Schedule: {self.schedule}")
         logging.info(f"Initial temperature: {self.segment_start_temp:.1f}°C")
-        
+
+        # Counter for periodic state saves
+        iteration_count = 0
+        state_save_interval = 5  # Save state every 5 iterations (~50 seconds with 10s relay cycle)
+        data_save_interval = 30  # Save data log every 30 iterations (~5 minutes)
+
         try:
             while self.firing_active and not self.emergency_stop:
                 current_temp = self.read_temperature()
                 elapsed_time = time.time() - self.segment_start_time
-                
+
                 logging.info(f"Loop iteration - segment elapsed: {elapsed_time:.1f}s, temp: {current_temp}°C")
-                
+
                 # Safety check
                 if not self.check_safety(current_temp):
                     self.emergency_stop = True
                     self.relay.value = False
                     logging.error("EMERGENCY STOP ACTIVATED")
                     break
-                
+
                 # Calculate setpoint
                 setpoint, complete = self.calculate_setpoint(
-                    current_temp, 
+                    current_temp,
                     elapsed_time
                 )
-                
+
                 logging.info(f"Calculated setpoint: {setpoint:.1f}°C, complete: {complete}")
-                
+
                 if complete:
                     logging.info("Firing schedule complete")
                     self.firing_active = False
                     break
-                
+
                 # Update PID
                 self.pid.setpoint = setpoint
                 control_output = self.pid(current_temp)
-                
+
                 logging.info(f"PID output: {control_output:.1f}%")
-                
+
                 # Update state for web interface
                 with self.state_lock:
                     self.current_setpoint = setpoint
                     self.current_output = control_output
-                
+
                 # Log data
                 log_entry = {
                     'time': datetime.now().isoformat(),
@@ -408,16 +413,26 @@ class KilnController:
                 }
                 self.data_log.append(log_entry)
                 logging.info(f"Temp: {current_temp:.1f}°C | Setpoint: {setpoint:.1f}°C | Output: {control_output:.1f}%")
-                
+
+                # Periodically save firing state and data log
+                iteration_count += 1
+                if iteration_count % state_save_interval == 0:
+                    self.save_firing_state()
+
+                if iteration_count % data_save_interval == 0:
+                    self.save_data_log()
+                    logging.info(f"Progress: {len(self.data_log)} data points logged")
+
                 # Control relay
                 logging.info(f"Calling control_relay with duty_cycle: {control_output:.1f}%")
                 self.control_relay(control_output)
-                
+
         except KeyboardInterrupt:
             logging.info("Firing interrupted by user")
         finally:
             self.relay.value = False
             self.save_data_log()
+            self.clear_firing_state()  # Clear state after successful completion or stop
             logging.info("Kiln powered off")
     
     def save_data_log(self, filename='kiln_data.json'):
@@ -428,6 +443,89 @@ class KilnController:
             logging.info(f"Data log saved to {filename}")
         except Exception as e:
             logging.error(f"Failed to save data log: {e}")
+
+    def load_data_log(self, filename='kiln_data.json'):
+        """Load firing data from file (for crash recovery)"""
+        try:
+            if os.path.exists(filename):
+                with open(filename, 'r') as f:
+                    self.data_log = json.load(f)
+                logging.info(f"Loaded {len(self.data_log)} data points from {filename}")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"Failed to load data log: {e}")
+            return False
+
+    def save_firing_state(self, filename='firing_state.json'):
+        """Save current firing state to disk for crash recovery"""
+        try:
+            state = {
+                'firing_active': self.firing_active,
+                'start_time': self.start_time,
+                'current_segment': self.current_segment,
+                'segment_start_time': self.segment_start_time,
+                'segment_start_temp': self.segment_start_temp,
+                'schedule': self.schedule,
+                'emergency_stop': self.emergency_stop,
+                'timestamp': datetime.now().isoformat()
+            }
+            with open(filename, 'w') as f:
+                json.dump(state, f, indent=2)
+            logging.debug(f"Firing state saved: segment {self.current_segment}/{len(self.schedule)}")
+        except Exception as e:
+            logging.error(f"Failed to save firing state: {e}")
+
+    def load_firing_state(self, filename='firing_state.json'):
+        """Load saved firing state from disk"""
+        try:
+            if not os.path.exists(filename):
+                return None
+
+            with open(filename, 'r') as f:
+                state = json.load(f)
+
+            # Validate state
+            if not state.get('firing_active'):
+                logging.info("Previous firing was not active, clearing state file")
+                os.remove(filename)
+                return None
+
+            logging.info(f"Found saved firing state from {state.get('timestamp')}")
+            logging.info(f"  Segment: {state.get('current_segment')}/{len(state.get('schedule', []))}")
+            logging.info(f"  Elapsed time: {time.time() - state.get('start_time', 0):.1f}s")
+
+            return state
+        except Exception as e:
+            logging.error(f"Failed to load firing state: {e}")
+            return None
+
+    def resume_firing(self, state):
+        """Resume firing from saved state"""
+        try:
+            self.schedule = state['schedule']
+            self.current_segment = state['current_segment']
+            self.start_time = state['start_time']
+            self.segment_start_time = state['segment_start_time']
+            self.segment_start_temp = state['segment_start_temp']
+            self.emergency_stop = state.get('emergency_stop', False)
+
+            logging.info("Firing state restored successfully")
+            logging.info(f"Resuming from segment {self.current_segment + 1}/{len(self.schedule)}")
+
+            return True
+        except Exception as e:
+            logging.error(f"Failed to resume firing state: {e}")
+            return False
+
+    def clear_firing_state(self, filename='firing_state.json'):
+        """Clear saved firing state (called after successful completion)"""
+        try:
+            if os.path.exists(filename):
+                os.remove(filename)
+                logging.info("Firing state cleared")
+        except Exception as e:
+            logging.error(f"Failed to clear firing state: {e}")
     
     def get_state(self):
         """Get current state for web interface"""
@@ -776,6 +874,64 @@ def get_config():
     """Get current configuration"""
     if kiln:
         return jsonify(kiln.config)
+    return jsonify({'error': 'Kiln not initialized'}), 500
+
+@app.route('/api/resume-check', methods=['GET'])
+def check_resume():
+    """Check if there's a saved firing state that can be resumed"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    state = kiln.load_firing_state()
+    if state:
+        return jsonify({
+            'can_resume': True,
+            'state': {
+                'segment': state.get('current_segment'),
+                'total_segments': len(state.get('schedule', [])),
+                'timestamp': state.get('timestamp'),
+                'elapsed_time': time.time() - state.get('start_time', 0)
+            }
+        })
+    return jsonify({'can_resume': False})
+
+@app.route('/api/resume', methods=['POST'])
+def resume_firing():
+    """Resume a previously interrupted firing"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    if kiln.firing_active:
+        return jsonify({'error': 'Firing already active'}), 400
+
+    # Load saved state
+    state = kiln.load_firing_state()
+    if not state:
+        return jsonify({'error': 'No saved firing state found'}), 404
+
+    # Restore the state
+    if not kiln.resume_firing(state):
+        return jsonify({'error': 'Failed to restore firing state'}), 500
+
+    # Load previous data log
+    kiln.load_data_log()
+
+    # Start firing in a separate thread (it will continue from saved state)
+    firing_thread = threading.Thread(target=kiln.run_firing)
+    firing_thread.daemon = True
+    firing_thread.start()
+
+    return jsonify({
+        'success': True,
+        'message': f'Firing resumed from segment {state["current_segment"] + 1}/{len(state["schedule"])}'
+    })
+
+@app.route('/api/clear-resume', methods=['POST'])
+def clear_resume():
+    """Clear saved firing state (discard resume capability)"""
+    if kiln:
+        kiln.clear_firing_state()
+        return jsonify({'success': True, 'message': 'Resume state cleared'})
     return jsonify({'error': 'Kiln not initialized'}), 500
 
 def start_web_server(port=5000, host='0.0.0.0'):
