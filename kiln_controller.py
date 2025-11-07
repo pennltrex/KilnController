@@ -349,20 +349,36 @@ class KilnController:
             logging.error("No firing schedule loaded")
             return
 
-        self.firing_active = True
-        self.start_time = time.time()
-        self.current_segment = 0
-        self.emergency_stop = False
+        # Check if we're resuming from a saved state
+        # If start_time and segment_start_time are already set, we're resuming
+        resuming = (self.start_time is not None and
+                    self.segment_start_time is not None)
 
-        # Initialize segment tracking
-        initial_temp = self.read_temperature()
-        self.segment_start_time = self.start_time
-        self.segment_start_temp = initial_temp if initial_temp else 20.0
+        if not resuming:
+            # Fresh start - initialize everything
+            self.firing_active = True
+            self.start_time = time.time()
+            self.current_segment = 0
+            self.emergency_stop = False
 
-        logging.info("Starting firing cycle")
-        logging.info(f"Schedule loaded with {len(self.schedule)} segments")
-        logging.info(f"Schedule: {self.schedule}")
-        logging.info(f"Initial temperature: {self.segment_start_temp:.1f}°C")
+            # Initialize segment tracking
+            initial_temp = self.read_temperature()
+            self.segment_start_time = self.start_time
+            self.segment_start_temp = initial_temp if initial_temp else 20.0
+
+            logging.info("Starting firing cycle")
+            logging.info(f"Schedule loaded with {len(self.schedule)} segments")
+            logging.info(f"Schedule: {self.schedule}")
+            logging.info(f"Initial temperature: {self.segment_start_temp:.1f}°C")
+        else:
+            # Resuming - preserve existing state, only set firing_active
+            self.firing_active = True
+            current_temp = self.read_temperature()
+            logging.info("Resuming firing cycle")
+            logging.info(f"Schedule: {self.current_schedule_name}")
+            logging.info(f"Resuming from segment {self.current_segment + 1}/{len(self.schedule)}")
+            logging.info(f"Segment start temp: {self.segment_start_temp:.1f}°C")
+            logging.info(f"Current temperature: {current_temp:.1f}°C")
 
         # Counter for periodic state saves
         iteration_count = 0
