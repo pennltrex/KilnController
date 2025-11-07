@@ -582,14 +582,14 @@
                     <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
                         Adjust these values to fine-tune temperature control
                     </p>
-                    
+
                     <button class="btn-primary" onclick="autoTunePID()" style="width: 100%; margin-bottom: 20px;">
                         🎯 Auto-Tune PID
                     </button>
                     <p style="color: #666; font-size: 0.85em; margin-bottom: 15px; text-align: center;">
                         Or adjust manually:
                     </p>
-                    
+
                     <div class="input-group" style="margin-bottom: 10px;">
                         <label>Kp (Proportional): <span id="kp-value">1.0</span></label>
                         <input type="range" id="kp-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%;">
@@ -613,16 +613,128 @@
                         • <strong>Oscillating?</strong> Decrease Kp and Ki
                     </div>
                 </div>
-                
+
                 <div class="card">
-                    <h2>Configuration</h2>
-                    <p style="color: #666; font-size: 0.9em;">
-                        Current PID settings are saved automatically when you apply changes. 
-                        For other configuration options, edit <code>config.json</code> on the Raspberry Pi.
+                    <h2>PID Advanced Settings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Advanced PID configuration parameters
                     </p>
+
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Sample Time (seconds): <span id="pid-sample-time-value">1.0</span></label>
+                        <input type="range" id="pid-sample-time-slider" min="0.5" max="5.0" step="0.5" value="1.0" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Output Min (%): <span id="output-min-value">0</span></label>
+                        <input type="range" id="output-min-slider" min="0" max="50" step="5" value="0" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Output Max (%): <span id="output-max-value">100</span></label>
+                        <input type="range" id="output-max-slider" min="50" max="100" step="5" value="100" style="width: 100%;">
+                    </div>
+                    <button class="btn-primary" onclick="updatePIDAdvanced()" style="width: 100%;">
+                        Apply Advanced Settings
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h2>Safety Settings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Configure temperature safety limits
+                    </p>
+
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Maximum Temperature (°C): <span id="max-temp-value">1300</span></label>
+                        <input type="range" id="max-temp-slider" min="500" max="1500" step="50" value="1300" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Safety Margin (°C): <span id="safety-margin-value">50</span></label>
+                        <input type="range" id="safety-margin-slider" min="10" max="100" step="10" value="50" style="width: 100%;">
+                    </div>
+                    <button class="btn-primary" onclick="updateSafetySettings()" style="width: 100%;">
+                        Apply Safety Settings
+                    </button>
+                    <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 6px; font-size: 0.85em;">
+                        <strong>⚠️ Warning:</strong> Safety settings protect your kiln from overheating. Only change these if you understand the implications.
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Control Settings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Configure relay and temperature update intervals
+                    </p>
+
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <label>Relay Cycle Time (seconds): <span id="relay-cycle-value">10.0</span></label>
+                        <input type="range" id="relay-cycle-slider" min="5" max="30" step="1" value="10" style="width: 100%;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Temperature Update Interval (seconds): <span id="temp-update-value">2.0</span></label>
+                        <input type="range" id="temp-update-slider" min="1" max="10" step="1" value="2" style="width: 100%;">
+                    </div>
+                    <button class="btn-primary" onclick="updateControlSettings()" style="width: 100%;">
+                        Apply Control Settings
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h2>Display Settings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Configure dashboard display and graph update frequency
+                    </p>
+
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Graph Update Frequency (seconds): <span id="graph-update-value">2</span></label>
+                        <input type="range" id="graph-update-slider" min="1" max="30" step="1" value="2" style="width: 100%;">
+                        <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                            How often the temperature history graph updates with new data points
+                        </p>
+                    </div>
+                    <button class="btn-primary" onclick="updateDisplaySettings()" style="width: 100%;">
+                        Apply Display Settings
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h2>Hardware Settings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Hardware configuration (read-only, requires server restart to change)
+                    </p>
+
+                    <div class="info-row">
+                        <span class="info-label">Relay Pin:</span>
+                        <span class="info-value" id="hw-relay-pin">--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Thermocouple CS Pin:</span>
+                        <span class="info-value" id="hw-tc-cs-pin">--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Thermocouple Type:</span>
+                        <span class="info-value" id="hw-tc-type">--</span>
+                    </div>
                     <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
-                        <strong>Configuration File Location:</strong><br>
-                        <code>~/KilnController/config.json</code>
+                        <strong>Note:</strong> Hardware settings require editing <code>config.json</code> and restarting the server.
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Web Server Settings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Web server configuration (read-only, requires server restart to change)
+                    </p>
+
+                    <div class="info-row">
+                        <span class="info-label">Host:</span>
+                        <span class="info-value" id="web-host">--</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Port:</span>
+                        <span class="info-value" id="web-port">--</span>
+                    </div>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 0.85em;">
+                        <strong>Note:</strong> Web settings require editing <code>config.json</code> and restarting the server.
                     </div>
                 </div>
             </div>
@@ -711,6 +823,8 @@
         let scheduleMaxTemp = 0;
         let scheduleTotalMinutes = 0;
         let chartTimeInterval = 10;
+        let lastGraphUpdate = 0;
+        let graphUpdateInterval = 2; // Default 2 seconds
 
         function switchTab(tabName) {
             // Hide all tabs
@@ -734,13 +848,49 @@
         document.getElementById('kp-slider').addEventListener('input', function(e) {
             document.getElementById('kp-value').textContent = parseFloat(e.target.value).toFixed(1);
         });
-        
+
         document.getElementById('ki-slider').addEventListener('input', function(e) {
             document.getElementById('ki-value').textContent = parseFloat(e.target.value).toFixed(2);
         });
-        
+
         document.getElementById('kd-slider').addEventListener('input', function(e) {
             document.getElementById('kd-value').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+
+        // PID Advanced slider update handlers
+        document.getElementById('pid-sample-time-slider').addEventListener('input', function(e) {
+            document.getElementById('pid-sample-time-value').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+
+        document.getElementById('output-min-slider').addEventListener('input', function(e) {
+            document.getElementById('output-min-value').textContent = e.target.value;
+        });
+
+        document.getElementById('output-max-slider').addEventListener('input', function(e) {
+            document.getElementById('output-max-value').textContent = e.target.value;
+        });
+
+        // Safety settings slider update handlers
+        document.getElementById('max-temp-slider').addEventListener('input', function(e) {
+            document.getElementById('max-temp-value').textContent = e.target.value;
+        });
+
+        document.getElementById('safety-margin-slider').addEventListener('input', function(e) {
+            document.getElementById('safety-margin-value').textContent = e.target.value;
+        });
+
+        // Control settings slider update handlers
+        document.getElementById('relay-cycle-slider').addEventListener('input', function(e) {
+            document.getElementById('relay-cycle-value').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+
+        document.getElementById('temp-update-slider').addEventListener('input', function(e) {
+            document.getElementById('temp-update-value').textContent = parseFloat(e.target.value).toFixed(1);
+        });
+
+        // Display settings slider update handlers
+        document.getElementById('graph-update-slider').addEventListener('input', function(e) {
+            document.getElementById('graph-update-value').textContent = e.target.value;
         });
 
         async function updatePID() {
@@ -788,30 +938,30 @@
             if (!confirm('Auto-tune will heat the kiln to about 100°C and analyze the response. This will take approximately 15-20 minutes. Continue?')) {
                 return;
             }
-            
+
             showAlert('Auto-tune started! Heating kiln and analyzing response. This will take 15-20 minutes. Watch the temperature graph.', 'success');
-            
+
             try {
                 const response = await fetch('/api/autotune', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ target_temp: 100, test_duration: 900 })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showAlert(data.message + ' Monitor the temperature graph.', 'success');
-                    
+
                     // Poll for completion
                     const checkInterval = setInterval(async () => {
                         try {
                             const statusResponse = await fetch('/api/status');
                             const statusData = await statusResponse.json();
-                            
+
                             if (!statusData.autotune_active) {
                                 clearInterval(checkInterval);
-                                
+
                                 // Reload PID settings
                                 await loadPIDSettings();
                                 showAlert('Auto-tune complete! New PID values have been loaded and saved.', 'success');
@@ -820,12 +970,159 @@
                             console.error('Error checking autotune status:', error);
                         }
                     }, 5000); // Check every 5 seconds
-                    
+
                 } else {
                     showAlert('Error: ' + (data.error || 'Failed to start auto-tune'), 'error');
                 }
             } catch (error) {
                 showAlert('Failed to start auto-tune: ' + error.message, 'error');
+            }
+        }
+
+        async function updatePIDAdvanced() {
+            const sampleTime = parseFloat(document.getElementById('pid-sample-time-slider').value);
+            const outputMin = parseFloat(document.getElementById('output-min-slider').value);
+            const outputMax = parseFloat(document.getElementById('output-max-slider').value);
+
+            try {
+                const response = await fetch('/api/config/pid-advanced', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sample_time: sampleTime,
+                        output_limits: [outputMin, outputMax]
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('PID advanced settings updated successfully', 'success');
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to update PID advanced settings: ' + error.message, 'error');
+            }
+        }
+
+        async function updateSafetySettings() {
+            const maxTemp = parseFloat(document.getElementById('max-temp-slider').value);
+            const safetyMargin = parseFloat(document.getElementById('safety-margin-slider').value);
+
+            if (!confirm('Changing safety settings can affect kiln protection. Are you sure?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/config/safety', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        max_temp: maxTemp,
+                        safety_margin: safetyMargin
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Safety settings updated successfully', 'success');
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to update safety settings: ' + error.message, 'error');
+            }
+        }
+
+        async function updateControlSettings() {
+            const relayCycleTime = parseFloat(document.getElementById('relay-cycle-slider').value);
+            const tempUpdateInterval = parseFloat(document.getElementById('temp-update-slider').value);
+
+            try {
+                const response = await fetch('/api/config/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        relay_cycle_time: relayCycleTime,
+                        temp_update_interval: tempUpdateInterval
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Control settings updated successfully', 'success');
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to update control settings: ' + error.message, 'error');
+            }
+        }
+
+        async function updateDisplaySettings() {
+            const graphUpdate = parseFloat(document.getElementById('graph-update-slider').value);
+            graphUpdateInterval = graphUpdate;
+
+            showAlert(`Graph update frequency set to ${graphUpdate} seconds`, 'success');
+        }
+
+        async function loadAllSettings() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+
+                // Load PID settings
+                if (config.pid) {
+                    document.getElementById('kp-slider').value = config.pid.kp;
+                    document.getElementById('ki-slider').value = config.pid.ki;
+                    document.getElementById('kd-slider').value = config.pid.kd;
+                    document.getElementById('kp-value').textContent = config.pid.kp.toFixed(1);
+                    document.getElementById('ki-value').textContent = config.pid.ki.toFixed(2);
+                    document.getElementById('kd-value').textContent = config.pid.kd.toFixed(1);
+
+                    // PID Advanced
+                    document.getElementById('pid-sample-time-slider').value = config.pid.sample_time;
+                    document.getElementById('pid-sample-time-value').textContent = config.pid.sample_time.toFixed(1);
+                    document.getElementById('output-min-slider').value = config.pid.output_limits[0];
+                    document.getElementById('output-min-value').textContent = config.pid.output_limits[0];
+                    document.getElementById('output-max-slider').value = config.pid.output_limits[1];
+                    document.getElementById('output-max-value').textContent = config.pid.output_limits[1];
+                }
+
+                // Load safety settings
+                if (config.safety) {
+                    document.getElementById('max-temp-slider').value = config.safety.max_temp;
+                    document.getElementById('max-temp-value').textContent = config.safety.max_temp;
+                    document.getElementById('safety-margin-slider').value = config.safety.safety_margin;
+                    document.getElementById('safety-margin-value').textContent = config.safety.safety_margin;
+                }
+
+                // Load control settings
+                if (config.control) {
+                    document.getElementById('relay-cycle-slider').value = config.control.relay_cycle_time;
+                    document.getElementById('relay-cycle-value').textContent = config.control.relay_cycle_time.toFixed(1);
+                    document.getElementById('temp-update-slider').value = config.control.temp_update_interval;
+                    document.getElementById('temp-update-value').textContent = config.control.temp_update_interval.toFixed(1);
+                }
+
+                // Load hardware settings (read-only)
+                if (config.hardware) {
+                    document.getElementById('hw-relay-pin').textContent = config.hardware.relay_pin;
+                    document.getElementById('hw-tc-cs-pin').textContent = config.hardware.thermocouple_cs_pin;
+                    document.getElementById('hw-tc-type').textContent = config.hardware.thermocouple_type;
+                }
+
+                // Load web settings (read-only)
+                if (config.web) {
+                    document.getElementById('web-host').textContent = config.web.host;
+                    document.getElementById('web-port').textContent = config.web.port;
+                }
+
+            } catch (error) {
+                console.error('Failed to load configuration:', error);
             }
         }
 
@@ -908,12 +1205,19 @@
             if (!scheduleStartTime || !loadedScheduleData) {
                 return;
             }
-            
+
+            // Check if enough time has elapsed since last graph update
+            const now = Date.now();
+            if (now - lastGraphUpdate < graphUpdateInterval * 1000) {
+                return; // Skip this update
+            }
+            lastGraphUpdate = now;
+
             const elapsedMs = new Date(timestamp) - scheduleStartTime;
             const elapsedMinutes = elapsedMs / (1000 * 60);
-            
+
             const index = Math.round(elapsedMinutes / chartTimeInterval);
-            
+
             if (index >= chart.data.labels.length) {
                 const newMinutes = (index + 1) * chartTimeInterval;
                 const hours = Math.floor(newMinutes / 60);
@@ -921,25 +1225,25 @@
                 chart.data.labels.push(hours > 0 ? `${hours}h ${mins}m` : `${mins}m`);
                 chart.data.datasets[0].data.push(null);
                 chart.data.datasets[1].data.push(null);
-                
+
                 const scheduledTemp = calculateScheduledTemp(newMinutes, loadedScheduleData, scheduleStartTemp);
                 chart.data.datasets[2].data.push(scheduledTemp);
-                
+
                 scheduleTotalMinutes = newMinutes;
             }
-            
+
             if (index >= 0 && index < chart.data.labels.length) {
                 chart.data.datasets[0].data[index] = temp;
                 chart.data.datasets[1].data[index] = setpoint;
             }
-            
+
             if (temp > chart.options.scales.y.max) {
                 chart.options.scales.y.max = Math.ceil(temp * 1.1);
             }
             if (setpoint > chart.options.scales.y.max) {
                 chart.options.scales.y.max = Math.ceil(setpoint * 1.1);
             }
-            
+
             chart.update('none');
         }
 
@@ -1555,10 +1859,11 @@
             console.log('Checking for elements:');
             console.log('  schedule-list:', document.getElementById('schedule-list'));
             console.log('  schedule-select:', document.getElementById('schedule-select'));
-            
+
             setTimeout(() => {
                 loadScheduleList();
                 loadPIDSettings();
+                loadAllSettings();
                 checkResumeState();
             }, 100);
 

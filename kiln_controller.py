@@ -901,6 +901,89 @@ def get_config():
         return jsonify(kiln.config)
     return jsonify({'error': 'Kiln not initialized'}), 500
 
+@app.route('/api/config/pid-advanced', methods=['POST'])
+def update_pid_advanced():
+    """Update PID advanced settings"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    data = request.json
+    sample_time = float(data.get('sample_time', kiln.pid.sample_time))
+    output_limits = data.get('output_limits', kiln.config['pid']['output_limits'])
+
+    try:
+        # Update PID sample time
+        kiln.pid.sample_time = sample_time
+        kiln.config['pid']['sample_time'] = sample_time
+
+        # Update output limits
+        kiln.pid.output_limits = tuple(output_limits)
+        kiln.config['pid']['output_limits'] = output_limits
+
+        # Save to config file
+        save_config(kiln.config)
+
+        logging.info(f"PID advanced settings updated: sample_time={sample_time}, output_limits={output_limits}")
+        return jsonify({'success': True, 'message': 'PID advanced settings updated'})
+    except Exception as e:
+        logging.error(f"Failed to update PID advanced settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/safety', methods=['POST'])
+def update_safety():
+    """Update safety settings"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    data = request.json
+    max_temp = float(data.get('max_temp', kiln.max_temp))
+    safety_margin = float(data.get('safety_margin', kiln.safety_margin))
+
+    try:
+        # Update kiln safety settings
+        kiln.max_temp = max_temp
+        kiln.safety_margin = safety_margin
+
+        # Update config
+        kiln.config['safety']['max_temp'] = max_temp
+        kiln.config['safety']['safety_margin'] = safety_margin
+
+        # Save to config file
+        save_config(kiln.config)
+
+        logging.info(f"Safety settings updated: max_temp={max_temp}, safety_margin={safety_margin}")
+        return jsonify({'success': True, 'message': 'Safety settings updated'})
+    except Exception as e:
+        logging.error(f"Failed to update safety settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/control', methods=['POST'])
+def update_control():
+    """Update control settings"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    data = request.json
+    relay_cycle_time = float(data.get('relay_cycle_time', kiln.relay_cycle_time))
+    temp_update_interval = float(data.get('temp_update_interval', kiln.config['control']['temp_update_interval']))
+
+    try:
+        # Update kiln control settings
+        kiln.relay_cycle_time = relay_cycle_time
+
+        # Update config
+        kiln.config['control']['relay_cycle_time'] = relay_cycle_time
+        kiln.config['control']['temp_update_interval'] = temp_update_interval
+
+        # Save to config file
+        save_config(kiln.config)
+
+        logging.info(f"Control settings updated: relay_cycle_time={relay_cycle_time}, temp_update_interval={temp_update_interval}")
+        return jsonify({'success': True, 'message': 'Control settings updated'})
+    except Exception as e:
+        logging.error(f"Failed to update control settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/current-firing', methods=['GET'])
 def get_current_firing():
     """Get current firing information if a firing is active"""
