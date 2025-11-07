@@ -14,6 +14,8 @@ source venv/bin/activate
 # Now install the dependencies (no warnings!)
 pip install adafruit-circuitpython-max31856
 pip install simple-pid
+pip install flask
+pip install flask_cors
 
 # When you're done working, deactivate:
 # deactivate
