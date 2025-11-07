@@ -495,6 +495,7 @@
                     </p>
                     <div id="resume-details" style="background: white; padding: 10px; border-radius: 8px; margin: 10px 0;">
                         <div style="font-size: 0.9em; color: #666;">
+                            <div><strong>Schedule:</strong> <span id="resume-schedule-name">--</span></div>
                             <div><strong>Segment:</strong> <span id="resume-segment">--</span></div>
                             <div><strong>Last saved:</strong> <span id="resume-timestamp">--</span></div>
                             <div><strong>Elapsed time:</strong> <span id="resume-elapsed">--</span></div>
@@ -1373,6 +1374,8 @@
                     resumeCard.style.display = 'block';
 
                     const state = data.state;
+                    document.getElementById('resume-schedule-name').textContent =
+                        state.schedule_name || 'Unknown';
                     document.getElementById('resume-segment').textContent =
                         `${state.segment + 1} / ${state.total_segments}`;
                     document.getElementById('resume-timestamp').textContent =
@@ -1399,7 +1402,87 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showAlert('Firing resumed successfully', 'success');
+                    // Load the schedule that was being used
+                    if (data.schedule_name && data.schedule) {
+                        currentScheduleName = data.schedule_name;
+                        loadedScheduleData = data.schedule;
+
+                        // Update UI to show loaded schedule
+                        document.getElementById('schedule-select').value = data.schedule_name;
+                        document.getElementById('start-btn').disabled = true; // Already firing
+
+                        // Display schedule summary
+                        await displayScheduleSummary(data.schedule_name);
+
+                        // Initialize chart with the schedule
+                        initializeChartForSchedule(data.schedule);
+
+                        // Set the schedule start time from the saved state
+                        scheduleStartTime = new Date(data.start_time * 1000);
+
+                        // Find the initial temperature from data log
+                        if (data.data_log && data.data_log.length > 0) {
+                            scheduleStartTemp = data.data_log[0].temp;
+                        } else {
+                            scheduleStartTemp = 20; // Default fallback
+                        }
+
+                        console.log('📊 Restored schedule:', data.schedule_name);
+                        console.log('   Schedule base temp:', scheduleStartTemp, '°C');
+                        console.log('   Schedule base time:', scheduleStartTime);
+
+                        // Repopulate the chart with historical data
+                        if (data.data_log && data.data_log.length > 0) {
+                            console.log('📈 Loading', data.data_log.length, 'historical data points');
+
+                            // Calculate scheduled temperatures for the chart
+                            for (let i = 0; i < chart.data.labels.length; i++) {
+                                const elapsedMinutes = i * chartTimeInterval;
+                                const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
+                                chart.data.datasets[2].data[i] = scheduledTemp;
+                            }
+
+                            // Plot all historical data points
+                            data.data_log.forEach(entry => {
+                                const entryTime = new Date(entry.time);
+                                const elapsedMs = entryTime - scheduleStartTime;
+                                const elapsedMinutes = elapsedMs / (1000 * 60);
+                                const index = Math.round(elapsedMinutes / chartTimeInterval);
+
+                                if (index >= 0) {
+                                    // Extend chart if needed
+                                    while (index >= chart.data.labels.length) {
+                                        const newMinutes = chart.data.labels.length * chartTimeInterval;
+                                        const hours = Math.floor(newMinutes / 60);
+                                        const mins = newMinutes % 60;
+                                        chart.data.labels.push(hours > 0 ? `${hours}h ${mins}m` : `${mins}m`);
+                                        chart.data.datasets[0].data.push(null);
+                                        chart.data.datasets[1].data.push(null);
+
+                                        const scheduledTemp = calculateScheduledTemp(newMinutes, loadedScheduleData, scheduleStartTemp);
+                                        chart.data.datasets[2].data.push(scheduledTemp);
+                                    }
+
+                                    // Plot the data point
+                                    chart.data.datasets[0].data[index] = entry.temp;
+                                    chart.data.datasets[1].data[index] = entry.setpoint;
+
+                                    // Update chart scale if needed
+                                    if (entry.temp > chart.options.scales.y.max) {
+                                        chart.options.scales.y.max = Math.ceil(entry.temp * 1.1);
+                                    }
+                                    if (entry.setpoint > chart.options.scales.y.max) {
+                                        chart.options.scales.y.max = Math.ceil(entry.setpoint * 1.1);
+                                    }
+                                }
+                            });
+
+                            chart.update();
+                            console.log('✅ Historical temperature data restored to chart');
+                        }
+                    }
+
+                    showAlert('Firing resumed successfully with schedule and history restored', 'success');
                     document.getElementById('resume-card').style.display = 'none';
                 } else {
                     showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
