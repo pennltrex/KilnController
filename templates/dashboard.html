@@ -1591,19 +1591,33 @@
         function updateTemperatureUnit(unit) {
             // Update temperature unit display throughout the page
             const unitSymbol = unit === 'F' ? '°F' : '°C';
+            console.log('updateTemperatureUnit called with:', unit, '-> symbol:', unitSymbol);
 
             // Update main temperature display
             const tempUnitMain = document.getElementById('temp-unit-main');
-            if (tempUnitMain) tempUnitMain.textContent = unitSymbol;
+            if (tempUnitMain) {
+                tempUnitMain.textContent = unitSymbol;
+                console.log('Updated temp-unit-main to:', unitSymbol);
+            } else {
+                console.error('Could not find temp-unit-main element');
+            }
 
             // Update setpoint display
             const tempUnitSetpoint = document.getElementById('temp-unit-setpoint');
-            if (tempUnitSetpoint) tempUnitSetpoint.textContent = unitSymbol;
+            if (tempUnitSetpoint) {
+                tempUnitSetpoint.textContent = unitSymbol;
+                console.log('Updated temp-unit-setpoint to:', unitSymbol);
+            } else {
+                console.error('Could not find temp-unit-setpoint element');
+            }
 
             // Update chart Y-axis label
             if (chart && chart.options && chart.options.scales && chart.options.scales.y) {
                 chart.options.scales.y.title.text = `Temperature (${unitSymbol})`;
                 chart.update('none'); // Update without animation
+                console.log('Updated chart Y-axis label to:', `Temperature (${unitSymbol})`);
+            } else {
+                console.warn('Chart not available for update');
             }
         }
 
@@ -1614,7 +1628,10 @@
 
                 // Update temperature unit if provided
                 if (data.temperature_unit) {
+                    console.log('Updating temperature unit to:', data.temperature_unit);
                     updateTemperatureUnit(data.temperature_unit);
+                } else {
+                    console.warn('No temperature_unit in API response');
                 }
 
                 const statusIndicator = document.getElementById('status-indicator');
