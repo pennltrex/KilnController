@@ -49,7 +49,8 @@ DEFAULT_CONFIG = {
     },
     "control": {
         "relay_cycle_time": 10.0,
-        "temp_update_interval": 2.0
+        "temp_update_interval": 2.0,
+        "temperature_unit": "C"
     },
     "web": {
         "host": "0.0.0.0",
@@ -140,7 +141,8 @@ class KilnController:
         
         # Control parameters
         self.relay_cycle_time = control_config['relay_cycle_time']
-        
+        self.temperature_unit = control_config.get('temperature_unit', 'C')
+
         # PID controller setup
         self.pid = PID(
             pid_config['kp'],
@@ -172,14 +174,50 @@ class KilnController:
         self.current_setpoint = 0
         self.current_output = 0
         self.state_lock = threading.Lock()
-        
+
+    def celsius_to_fahrenheit(self, temp_c):
+        """Convert Celsius to Fahrenheit"""
+        if temp_c is None:
+            return None
+        return (temp_c * 9/5) + 32
+
+    def fahrenheit_to_celsius(self, temp_f):
+        """Convert Fahrenheit to Celsius"""
+        if temp_f is None:
+            return None
+        return (temp_f - 32) * 5/9
+
+    def convert_temp_from_sensor(self, temp_c):
+        """
+        Convert temperature from sensor (Celsius) to configured unit
+        MAX31856 .temperature property returns Celsius
+        """
+        if temp_c is None:
+            return None
+        if self.temperature_unit == 'F':
+            return self.celsius_to_fahrenheit(temp_c)
+        return temp_c
+
+    def convert_temp_to_sensor(self, temp):
+        """
+        Convert temperature from configured unit to sensor unit (Celsius)
+        Used for setpoints and calculations
+        """
+        if temp is None:
+            return None
+        if self.temperature_unit == 'F':
+            return self.fahrenheit_to_celsius(temp)
+        return temp
+
     def read_temperature(self):
         """Read current temperature from thermocouple"""
         try:
-            temp = self.thermocouple.temperature
-            if temp is None:
+            temp_c = self.thermocouple.temperature  # MAX31856 returns Celsius
+            if temp_c is None:
                 logging.error("Failed to read temperature")
                 return None
+            # Convert to configured unit
+            temp = self.convert_temp_from_sensor(temp_c)
             with self.state_lock:
                 self.current_temp = temp
             return temp
@@ -568,7 +606,8 @@ class KilnController:
                 'pid_kd': self.pid.Kd,
                 'autotune_active': getattr(self, 'autotune_active', False),
                 'start_time': datetime.fromtimestamp(self.start_time).isoformat() if self.start_time else None,
-                'schedule': self.schedule
+                'schedule': self.schedule,
+                'temperature_unit': self.temperature_unit
             }
     
     def set_pid_tunings(self, kp, ki, kd):

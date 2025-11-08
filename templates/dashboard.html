@@ -444,11 +444,11 @@
                 <div class="card">
                     <h2>Current Status</h2>
                     <div class="temp-display">
-                        <span id="current-temp">--</span><span class="temp-unit">°C</span>
+                        <span id="current-temp">--</span><span class="temp-unit" id="temp-unit-main">°C</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Setpoint:</span>
-                        <span class="info-value"><span id="setpoint">--</span>°C</span>
+                        <span class="info-value"><span id="setpoint">--</span><span id="temp-unit-setpoint">°C</span></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Output:</span>
@@ -1588,11 +1588,35 @@
             }
         });
 
+        function updateTemperatureUnit(unit) {
+            // Update temperature unit display throughout the page
+            const unitSymbol = unit === 'F' ? '°F' : '°C';
+
+            // Update main temperature display
+            const tempUnitMain = document.getElementById('temp-unit-main');
+            if (tempUnitMain) tempUnitMain.textContent = unitSymbol;
+
+            // Update setpoint display
+            const tempUnitSetpoint = document.getElementById('temp-unit-setpoint');
+            if (tempUnitSetpoint) tempUnitSetpoint.textContent = unitSymbol;
+
+            // Update chart Y-axis label
+            if (chart && chart.options && chart.options.scales && chart.options.scales.y) {
+                chart.options.scales.y.title.text = `Temperature (${unitSymbol})`;
+                chart.update('none'); // Update without animation
+            }
+        }
+
         async function updateStatus() {
             try {
                 const response = await fetch('/api/status');
                 const data = await response.json();
-                
+
+                // Update temperature unit if provided
+                if (data.temperature_unit) {
+                    updateTemperatureUnit(data.temperature_unit);
+                }
+
                 const statusIndicator = document.getElementById('status-indicator');
                 
                 const wasFiring = statusIndicator && statusIndicator.classList.contains('active');
