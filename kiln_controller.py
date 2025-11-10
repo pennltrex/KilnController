@@ -609,6 +609,9 @@ class KilnController:
     def get_state(self):
         """Get current state for web interface"""
         with self.state_lock:
+            # Get display temperature unit preference (frontend display), not backend unit
+            display_temp_unit = self.config.get('display', {}).get('temperature_unit', 'C')
+
             return {
                 'temperature': self.current_temp,
                 'setpoint': self.current_setpoint,
@@ -624,7 +627,7 @@ class KilnController:
                 'autotune_active': getattr(self, 'autotune_active', False),
                 'start_time': datetime.fromtimestamp(self.start_time).isoformat() if self.start_time else None,
                 'schedule': self.schedule,
-                'temperature_unit': self.temperature_unit
+                'temperature_unit': display_temp_unit
             }
     
     def set_pid_tunings(self, kp, ki, kd):
