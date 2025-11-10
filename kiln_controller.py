@@ -403,8 +403,10 @@ class KilnController:
             return
 
         # Check if we're resuming from a saved state
-        # If start_time and segment_start_time are already set, we're resuming
-        resuming = (self.start_time is not None and
+        # Only resume if firing was already active (e.g., after system restart)
+        # If firing_active is False, this is a fresh start even if old state exists
+        resuming = (self.firing_active and
+                    self.start_time is not None and
                     self.segment_start_time is not None)
 
         if not resuming:
