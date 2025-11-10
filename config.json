@@ -17,7 +17,8 @@
     },
     "control": {
         "relay_cycle_time": 10.0,
-        "temp_update_interval": 2.0
+        "temp_update_interval": 2.0,
+        "temperature_unit": "C"
     },
     "web": {
         "host": "0.0.0.0",
