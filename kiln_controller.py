@@ -582,7 +582,7 @@ class KilnController:
                 'pid_ki': self.pid.Ki,
                 'pid_kd': self.pid.Kd,
                 'autotune_active': getattr(self, 'autotune_active', False),
-                'start_time': self.start_time.isoformat() if self.start_time else None,
+                'start_time': datetime.fromtimestamp(self.start_time).isoformat() if self.start_time else None,
                 'schedule': self.schedule
             }
     

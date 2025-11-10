@@ -2073,6 +2073,9 @@
             console.log('  schedule-list:', document.getElementById('schedule-list'));
             console.log('  schedule-select:', document.getElementById('schedule-select'));
 
+            // Load temperature unit preference
+            loadTemperatureUnitPreference();
+
             setTimeout(() => {
                 loadScheduleList();
                 loadPIDSettings();
