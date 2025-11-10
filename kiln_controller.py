@@ -54,6 +54,9 @@ DEFAULT_CONFIG = {
     "web": {
         "host": "0.0.0.0",
         "port": 5000
+    },
+    "display": {
+        "temperature_unit": "C"
     }
 }
 
@@ -89,6 +92,18 @@ def save_config(config, config_file='config.json'):
     except Exception as e:
         logging.error(f"Failed to save config: {e}")
         return False
+
+def celsius_to_fahrenheit(celsius):
+    """Convert Celsius to Fahrenheit"""
+    if celsius is None:
+        return None
+    return (celsius * 9/5) + 32
+
+def fahrenheit_to_celsius(fahrenheit):
+    """Convert Fahrenheit to Celsius"""
+    if fahrenheit is None:
+        return None
+    return (fahrenheit - 32) * 5/9
 
 class KilnController:
     def __init__(self, config=None):
@@ -985,6 +1000,43 @@ def update_control():
     except Exception as e:
         logging.error(f"Failed to update control settings: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/display', methods=['GET', 'POST'])
+def handle_display_settings():
+    """Get or update display settings (temperature unit)"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    if request.method == 'GET':
+        # Ensure display config exists
+        if 'display' not in kiln.config:
+            kiln.config['display'] = {'temperature_unit': 'C'}
+        return jsonify(kiln.config.get('display', {'temperature_unit': 'C'}))
+
+    elif request.method == 'POST':
+        data = request.json
+        temperature_unit = data.get('temperature_unit', 'C')
+
+        # Validate temperature unit
+        if temperature_unit not in ['C', 'F']:
+            return jsonify({'error': 'Invalid temperature unit. Must be C or F'}), 400
+
+        try:
+            # Ensure display config exists
+            if 'display' not in kiln.config:
+                kiln.config['display'] = {}
+
+            # Update config
+            kiln.config['display']['temperature_unit'] = temperature_unit
+
+            # Save to config file
+            save_config(kiln.config)
+
+            logging.info(f"Display settings updated: temperature_unit={temperature_unit}")
+            return jsonify({'success': True, 'message': 'Display settings updated'})
+        except Exception as e:
+            logging.error(f"Failed to update display settings: {e}")
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/current-firing', methods=['GET'])
 def get_current_firing():
