@@ -29,6 +29,7 @@ $RECYCLE.BIN/
 *.log
 *.sql
 *.sqlite
+*.json
 
 # Build outputs
 build/
