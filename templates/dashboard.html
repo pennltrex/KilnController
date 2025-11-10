@@ -693,6 +693,14 @@
                     </p>
 
                     <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Temperature Units:</label>
+                        <select id="temp-unit-select" style="width: 100%;" onchange="changeTemperatureUnit()">
+                            <option value="C">Celsius (°C)</option>
+                            <option value="F">Fahrenheit (°F)</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group" style="margin-bottom: 15px;">
                         <label>Graph Update Frequency (seconds): <span id="graph-update-value">2</span></label>
                         <input type="range" id="graph-update-slider" min="1" max="30" step="1" value="2" style="width: 100%;">
                         <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
@@ -833,6 +841,93 @@
         let chartTimeInterval = 10;
         let lastGraphUpdate = 0;
         let graphUpdateInterval = 2; // Default 2 seconds
+        let currentTempUnit = 'C'; // Default to Celsius
+
+        // Temperature conversion functions
+        function celsiusToFahrenheit(celsius) {
+            if (celsius === null || celsius === undefined) return null;
+            return (celsius * 9/5) + 32;
+        }
+
+        function fahrenheitToCelsius(fahrenheit) {
+            if (fahrenheit === null || fahrenheit === undefined) return null;
+            return (fahrenheit - 32) * 5/9;
+        }
+
+        function convertTemp(tempC, toUnit) {
+            if (tempC === null || tempC === undefined) return null;
+            return toUnit === 'F' ? celsiusToFahrenheit(tempC) : tempC;
+        }
+
+        function formatTemp(tempC, unit) {
+            if (tempC === null || tempC === undefined) return '--';
+            const temp = convertTemp(tempC, unit);
+            return temp !== null ? temp.toFixed(1) : '--';
+        }
+
+        function getTempUnitSymbol(unit) {
+            return unit === 'F' ? '°F' : '°C';
+        }
+
+        function changeTemperatureUnit() {
+            const previousUnit = currentTempUnit;
+            const newUnit = document.getElementById('temp-unit-select').value;
+
+            // If unit hasn't changed, do nothing
+            if (previousUnit === newUnit) {
+                return;
+            }
+
+            currentTempUnit = newUnit;
+
+            // Save preference to localStorage
+            localStorage.setItem('temperatureUnit', newUnit);
+
+            // Update chart Y-axis label
+            const symbol = getTempUnitSymbol(newUnit);
+            chart.options.scales.y.title.text = `Temperature (${symbol})`;
+
+            // Convert existing data points
+            const conversionFunc = (previousUnit === 'C' && newUnit === 'F') ? celsiusToFahrenheit : fahrenheitToCelsius;
+
+            chart.data.datasets.forEach(dataset => {
+                dataset.data = dataset.data.map(temp =>
+                    temp !== null ? conversionFunc(temp) : null
+                );
+            });
+
+            // Recalculate chart scale from data
+            let maxTemp = 0;
+            chart.data.datasets.forEach(dataset => {
+                dataset.data.forEach(temp => {
+                    if (temp !== null && temp > maxTemp) {
+                        maxTemp = temp;
+                    }
+                });
+            });
+
+            if (maxTemp > 0) {
+                chart.options.scales.y.max = Math.ceil(maxTemp * 1.1);
+            }
+
+            chart.update();
+
+            // Force immediate status update to refresh all displayed temperatures
+            updateStatus();
+        }
+
+        function loadTemperatureUnitPreference() {
+            const savedUnit = localStorage.getItem('temperatureUnit');
+            if (savedUnit && (savedUnit === 'C' || savedUnit === 'F')) {
+                currentTempUnit = savedUnit;
+                document.getElementById('temp-unit-select').value = savedUnit;
+
+                // Update chart label on load
+                const symbol = getTempUnitSymbol(savedUnit);
+                chart.options.scales.y.title.text = `Temperature (${symbol})`;
+                chart.update();
+            }
+        }
 
         function switchTab(tabName) {
             // Hide all tabs
@@ -1165,11 +1260,14 @@
             for (let i = 0; i < chart.data.labels.length; i++) {
                 const elapsedMinutes = i * chartTimeInterval;
                 const scheduledTemp = calculateScheduledTemp(elapsedMinutes, schedule, 20);
-                chart.data.datasets[2].data.push(scheduledTemp);
+                // Convert scheduled temperature to current unit
+                const displayTemp = convertTemp(scheduledTemp, currentTempUnit);
+                chart.data.datasets[2].data.push(displayTemp);
             }
-            
+
             chart.options.scales.y.min = 0;
-            chart.options.scales.y.max = scheduleMaxTemp;
+            // Convert max temp to current unit
+            chart.options.scales.y.max = convertTemp(scheduleMaxTemp, currentTempUnit);
             
             chart.update();
             
@@ -1272,21 +1370,28 @@
                 chart.data.datasets[1].data.push(null);
 
                 const scheduledTemp = calculateScheduledTemp(newMinutes, loadedScheduleData, scheduleStartTemp);
-                chart.data.datasets[2].data.push(scheduledTemp);
+                // Convert scheduled temperature to current unit
+                const displayScheduledTemp = convertTemp(scheduledTemp, currentTempUnit);
+                chart.data.datasets[2].data.push(displayScheduledTemp);
 
                 scheduleTotalMinutes = newMinutes;
             }
 
             if (index >= 0 && index < chart.data.labels.length) {
-                chart.data.datasets[0].data[index] = temp;
-                chart.data.datasets[1].data[index] = setpoint;
-            }
+                // Convert temperature to current unit before adding to chart
+                const displayTemp = convertTemp(temp, currentTempUnit);
+                const displaySetpoint = convertTemp(setpoint, currentTempUnit);
 
-            if (temp > chart.options.scales.y.max) {
-                chart.options.scales.y.max = Math.ceil(temp * 1.1);
-            }
-            if (setpoint > chart.options.scales.y.max) {
-                chart.options.scales.y.max = Math.ceil(setpoint * 1.1);
+                chart.data.datasets[0].data[index] = displayTemp;
+                chart.data.datasets[1].data[index] = displaySetpoint;
+
+                // Update chart scale if needed
+                if (displayTemp > chart.options.scales.y.max) {
+                    chart.options.scales.y.max = Math.ceil(displayTemp * 1.1);
+                }
+                if (displaySetpoint > chart.options.scales.y.max) {
+                    chart.options.scales.y.max = Math.ceil(displaySetpoint * 1.1);
+                }
             }
 
             chart.update('none');
@@ -1609,7 +1714,9 @@
                     for (let i = 0; i < chart.data.labels.length; i++) {
                         const elapsedMinutes = i * chartTimeInterval;
                         const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
-                        chart.data.datasets[2].data[i] = scheduledTemp;
+                        // Convert to current unit
+                        const displayScheduledTemp = convertTemp(scheduledTemp, currentTempUnit);
+                        chart.data.datasets[2].data[i] = displayScheduledTemp;
                     }
                     chart.update();
                 }
@@ -1619,10 +1726,16 @@
                     scheduleStartTemp = null;
                     console.log('Firing stopped');
                 }
-                
-                const temp = data.temperature !== null ? data.temperature.toFixed(1) : '--';
+
+                // Convert and display temperatures in the selected unit
+                const symbol = getTempUnitSymbol(currentTempUnit);
+                const temp = formatTemp(data.temperature, currentTempUnit);
+                const setpoint = formatTemp(data.setpoint, currentTempUnit);
+
                 document.getElementById('current-temp').textContent = temp;
-                document.getElementById('setpoint').textContent = data.setpoint.toFixed(1);
+                document.querySelector('.temp-unit').textContent = symbol;
+                document.getElementById('setpoint').textContent = setpoint;
+                document.querySelector('#setpoint').parentElement.querySelector('.info-value').innerHTML = `<span id="setpoint">${setpoint}</span>${symbol}`;
                 document.getElementById('output').textContent = data.output.toFixed(1);
                 document.getElementById('output-bar').style.width = data.output + '%';
                 
@@ -1777,7 +1890,9 @@
                     for (let i = 0; i < chart.data.labels.length; i++) {
                         const elapsedMinutes = i * chartTimeInterval;
                         const scheduledTemp = calculateScheduledTemp(elapsedMinutes, loadedScheduleData, scheduleStartTemp);
-                        chart.data.datasets[2].data[i] = scheduledTemp;
+                        // Convert to current unit
+                        const displayScheduledTemp = convertTemp(scheduledTemp, currentTempUnit);
+                        chart.data.datasets[2].data[i] = displayScheduledTemp;
                     }
 
                     // Plot all historical data points
@@ -1798,19 +1913,24 @@
                                 chart.data.datasets[1].data.push(null);
 
                                 const scheduledTemp = calculateScheduledTemp(newMinutes, loadedScheduleData, scheduleStartTemp);
-                                chart.data.datasets[2].data.push(scheduledTemp);
+                                // Convert to current unit
+                                const displayScheduledTemp = convertTemp(scheduledTemp, currentTempUnit);
+                                chart.data.datasets[2].data.push(displayScheduledTemp);
                             }
 
-                            // Plot the data point
-                            chart.data.datasets[0].data[index] = entry.temp;
-                            chart.data.datasets[1].data[index] = entry.setpoint;
+                            // Plot the data point (convert to current unit)
+                            const displayTemp = convertTemp(entry.temp, currentTempUnit);
+                            const displaySetpoint = convertTemp(entry.setpoint, currentTempUnit);
+
+                            chart.data.datasets[0].data[index] = displayTemp;
+                            chart.data.datasets[1].data[index] = displaySetpoint;
 
                             // Update chart scale if needed
-                            if (entry.temp > chart.options.scales.y.max) {
-                                chart.options.scales.y.max = Math.ceil(entry.temp * 1.1);
+                            if (displayTemp > chart.options.scales.y.max) {
+                                chart.options.scales.y.max = Math.ceil(displayTemp * 1.1);
                             }
-                            if (entry.setpoint > chart.options.scales.y.max) {
-                                chart.options.scales.y.max = Math.ceil(entry.setpoint * 1.1);
+                            if (displaySetpoint > chart.options.scales.y.max) {
+                                chart.options.scales.y.max = Math.ceil(displaySetpoint * 1.1);
                             }
                         }
                     });
@@ -1927,6 +2047,9 @@
             console.log('Checking for elements:');
             console.log('  schedule-list:', document.getElementById('schedule-list'));
             console.log('  schedule-select:', document.getElementById('schedule-select'));
+
+            // Load temperature unit preference
+            loadTemperatureUnitPreference();
 
             setTimeout(() => {
                 loadScheduleList();
