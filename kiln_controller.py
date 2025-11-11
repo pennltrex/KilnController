@@ -157,7 +157,7 @@ class KilnController:
         self.emergency_stop = False
         
         # Control parameters
-        self.relay_cycle_time = control_config['relay_cycle_time']
+        self.relay_cycle_time = control_config.get('relay_cycle_time', 10.0)
         self.temperature_unit = control_config.get('temperature_unit', 'C')
         self.segment_temp_tolerance = control_config.get('segment_temp_tolerance', 5.0)
 
@@ -1076,7 +1076,7 @@ def update_control():
 
     data = request.json
     relay_cycle_time = float(data.get('relay_cycle_time', kiln.relay_cycle_time))
-    temp_update_interval = float(data.get('temp_update_interval', kiln.config['control']['temp_update_interval']))
+    temp_update_interval = float(data.get('temp_update_interval', kiln.config.get('control', {}).get('temp_update_interval', 2.0)))
 
     try:
         # Update kiln control settings
@@ -1261,7 +1261,7 @@ if __name__ == "__main__":
     web_thread.start()
     
     # Simple temperature monitoring
-    update_interval = control_config['temp_update_interval']
+    update_interval = control_config.get('temp_update_interval', 2.0)
     logging.info("Starting temperature monitoring (Ctrl+C to stop)")
     logging.info(f"Web interface available at http://[your-pi-ip]:{web_config['port']}")
     try:
