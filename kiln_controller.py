@@ -18,6 +18,7 @@ import logging
 import threading
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
+from pyrometric_cones import ConeCalculator
 
 # Setup logging
 logging.basicConfig(
@@ -185,7 +186,11 @@ class KilnController:
         
         # Data logging
         self.data_log = []
-        
+
+        # Pyrometric cone tracking
+        self.cone_calculator = ConeCalculator()
+        self.current_cone = None
+
         # Current state for web interface
         self.current_temp = None
         self.current_setpoint = 0
@@ -432,6 +437,10 @@ class KilnController:
             self.segment_start_time = self.start_time
             self.segment_start_temp = initial_temp if initial_temp else 20.0
 
+            # Reset cone calculator for fresh firing
+            self.cone_calculator.reset()
+            self.current_cone = None
+
             logging.info("Starting firing cycle")
             logging.info(f"Schedule loaded with {len(self.schedule)} segments")
             logging.info(f"Schedule: {self.schedule}")
@@ -484,6 +493,13 @@ class KilnController:
 
                 logging.info(f"PID output: {control_output:.1f}%")
 
+                # Update pyrometric cone calculation
+                # Convert to Celsius for cone calculation (cone data is in Celsius)
+                temp_c = self.convert_temp_to_sensor(current_temp)
+                self.cone_calculator.update(temp_c, time.time())
+                self.current_cone = self.cone_calculator.get_current_cone()
+                cone_lower, cone_upper, cone_fraction = self.cone_calculator.estimate_cone_between()
+
                 # Update state for web interface
                 with self.state_lock:
                     self.current_setpoint = setpoint
@@ -496,10 +512,18 @@ class KilnController:
                     'temp': current_temp,
                     'setpoint': setpoint,
                     'output': control_output,
-                    'segment': self.current_segment
+                    'segment': self.current_segment,
+                    'cone': self.current_cone,
+                    'cone_lower': cone_lower,
+                    'cone_upper': cone_upper,
+                    'cone_fraction': cone_fraction,
+                    'heat_work': self.cone_calculator.heat_work
                 }
                 self.data_log.append(log_entry)
-                logging.info(f"Temp: {current_temp:.1f}°C | Setpoint: {setpoint:.1f}°C | Output: {control_output:.1f}%")
+
+                # Enhanced logging with cone info
+                cone_info = f" | Cone: {self.current_cone}" if self.current_cone else ""
+                logging.info(f"Temp: {current_temp:.1f}°C | Setpoint: {setpoint:.1f}°C | Output: {control_output:.1f}%{cone_info}")
 
                 # Periodically save firing state and data log
                 iteration_count += 1
@@ -556,6 +580,7 @@ class KilnController:
                 'schedule': self.schedule,
                 'schedule_name': self.current_schedule_name,  # Save the schedule name
                 'emergency_stop': self.emergency_stop,
+                'heat_work': self.cone_calculator.heat_work,
                 'timestamp': datetime.now().isoformat()
             }
             with open(filename, 'w') as f:
@@ -599,6 +624,12 @@ class KilnController:
             self.segment_start_temp = state['segment_start_temp']
             self.emergency_stop = state.get('emergency_stop', False)
 
+            # Restore cone calculator heat work
+            if 'heat_work' in state:
+                self.cone_calculator.heat_work = state['heat_work']
+                self.cone_calculator.last_update_time = time.time()
+                logging.info(f"Restored heat work: {self.cone_calculator.heat_work:.2f}")
+
             logging.info("Firing state restored successfully")
             logging.info(f"Schedule: {self.current_schedule_name}")
             logging.info(f"Resuming from segment {self.current_segment + 1}/{len(self.schedule)}")
@@ -623,6 +654,9 @@ class KilnController:
             # Get display temperature unit preference (frontend display), not backend unit
             display_temp_unit = self.config.get('display', {}).get('temperature_unit', 'C')
 
+            # Get cone information
+            cone_lower, cone_upper, cone_fraction = self.cone_calculator.estimate_cone_between()
+
             return {
                 'temperature': self.current_temp,
                 'setpoint': self.current_setpoint,
@@ -638,7 +672,12 @@ class KilnController:
                 'autotune_active': getattr(self, 'autotune_active', False),
                 'start_time': datetime.fromtimestamp(self.start_time).isoformat() if self.start_time else None,
                 'schedule': self.schedule,
-                'temperature_unit': display_temp_unit
+                'temperature_unit': display_temp_unit,
+                'cone': self.current_cone,
+                'cone_lower': cone_lower,
+                'cone_upper': cone_upper,
+                'cone_fraction': cone_fraction,
+                'heat_work': self.cone_calculator.heat_work
             }
     
     def set_pid_tunings(self, kp, ki, kd):
@@ -1175,6 +1214,26 @@ def clear_resume():
         kiln.clear_firing_state()
         return jsonify({'success': True, 'message': 'Resume state cleared'})
     return jsonify({'error': 'Kiln not initialized'}), 500
+
+@app.route('/api/cones', methods=['GET'])
+def get_cones():
+    """Get list of all available pyrometric cones"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    cones = kiln.cone_calculator.get_all_cones()
+    return jsonify(cones)
+
+@app.route('/api/cones/<cone_name>', methods=['GET'])
+def get_cone_info(cone_name):
+    """Get detailed information about a specific cone"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    cone_info = kiln.cone_calculator.get_cone_info(cone_name)
+    if cone_info:
+        return jsonify(cone_info)
+    return jsonify({'error': f'Cone {cone_name} not found'}), 404
 
 def start_web_server(port=5000, host='0.0.0.0'):
     """Start the Flask web server"""
