@@ -50,7 +50,8 @@ DEFAULT_CONFIG = {
     "control": {
         "relay_cycle_time": 10.0,
         "temp_update_interval": 2.0,
-        "temperature_unit": "C"
+        "temperature_unit": "C",
+        "segment_temp_tolerance": 5.0
     },
     "web": {
         "host": "0.0.0.0",
@@ -157,6 +158,7 @@ class KilnController:
         # Control parameters
         self.relay_cycle_time = control_config['relay_cycle_time']
         self.temperature_unit = control_config.get('temperature_unit', 'C')
+        self.segment_temp_tolerance = control_config.get('segment_temp_tolerance', 5.0)
 
         # PID controller setup
         self.pid = PID(
@@ -384,15 +386,24 @@ class KilnController:
             # Holding at target
             setpoint = target
         else:
-            # Move to next segment
-            self.current_segment += 1
-            if self.current_segment < len(self.schedule):
-                self.segment_start_temp = target
-                self.segment_start_time = time.time()
-                logging.info(f"Moving to segment {self.current_segment + 1}, start temp: {target}°C")
-                return self.calculate_setpoint(current_temp, 0)
+            # Check if actual temperature has reached target before moving to next segment
+            temp_diff = abs(current_temp - target)
+            if temp_diff > self.segment_temp_tolerance:
+                # Temperature hasn't reached target yet, continue holding
+                logging.warning(f"Segment time elapsed but temperature not reached. "
+                              f"Current: {current_temp:.1f}°C, Target: {target:.1f}°C, "
+                              f"Diff: {temp_diff:.1f}°C (tolerance: {self.segment_temp_tolerance}°C)")
+                setpoint = target
             else:
-                return current_temp, True
+                # Temperature reached target, move to next segment
+                self.current_segment += 1
+                if self.current_segment < len(self.schedule):
+                    self.segment_start_temp = target
+                    self.segment_start_time = time.time()
+                    logging.info(f"Moving to segment {self.current_segment + 1}, start temp: {target}°C")
+                    return self.calculate_setpoint(current_temp, 0)
+                else:
+                    return current_temp, True
         
         return setpoint, False
     
