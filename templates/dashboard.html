@@ -417,6 +417,34 @@
             transition: width 0.3s;
         }
 
+        .cone-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .cone-value {
+            font-size: 2em;
+            font-weight: 700;
+            margin: 5px 0;
+        }
+
+        .cone-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .cone-info-text {
+            font-size: 0.85em;
+            margin-top: 5px;
+            opacity: 0.85;
+        }
+
         .alert {
             padding: 12px 15px;
             border-radius: 3px;
@@ -500,6 +528,14 @@
                         <span class="info-label">Time Remaining:</span>
                         <span class="info-value" id="time-remaining">--</span>
                     </div>
+
+                    <!-- Pyrometric Cone Display -->
+                    <div class="cone-display" id="cone-display" style="display: none;">
+                        <div class="cone-label">Pyrometric Cone</div>
+                        <div class="cone-value" id="cone-value">--</div>
+                        <div class="cone-info-text" id="cone-info">Tracking heat-work</div>
+                    </div>
+
                     <div class="info-row">
                         <span class="info-label">Last Update:</span>
                         <span class="info-value" id="last-update">--</span>
@@ -1891,11 +1927,38 @@
                     document.getElementById('pid-display').textContent =
                         `Kp:${data.pid_kp.toFixed(1)} Ki:${data.pid_ki.toFixed(2)} Kd:${data.pid_kd.toFixed(1)}`;
                 }
-                
+
+                // Update pyrometric cone display
+                const coneDisplay = document.getElementById('cone-display');
+                const coneValue = document.getElementById('cone-value');
+                const coneInfo = document.getElementById('cone-info');
+
+                if (data.firing_active && data.cone) {
+                    // Show cone display with current cone value
+                    coneDisplay.style.display = 'block';
+                    coneValue.textContent = `△${data.cone}`;
+
+                    // Show interpolation info if between cones
+                    if (data.cone_lower && data.cone_upper && data.cone_fraction !== undefined) {
+                        const percentage = (data.cone_fraction * 100).toFixed(0);
+                        coneInfo.textContent = `Between △${data.cone_lower} and △${data.cone_upper} (${percentage}%)`;
+                    } else {
+                        coneInfo.textContent = 'Tracking heat-work';
+                    }
+                } else if (data.firing_active && !data.cone && data.heat_work !== undefined && data.heat_work > 0) {
+                    // Show that heat-work is accumulating but no cone reached yet
+                    coneDisplay.style.display = 'block';
+                    coneValue.textContent = '< △022';
+                    coneInfo.textContent = 'Accumulating heat-work';
+                } else {
+                    // Hide cone display when not firing
+                    coneDisplay.style.display = 'none';
+                }
+
                 if (data.temperature !== null && isFiring) {
                     updateChart(data.timestamp, data.temperature, data.setpoint);
                 }
-                
+
             } catch (error) {
                 console.error('Error fetching status:', error);
             }
