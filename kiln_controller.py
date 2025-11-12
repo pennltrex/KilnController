@@ -35,7 +35,8 @@ DEFAULT_CONFIG = {
     "hardware": {
         "relay_pin": 23,
         "thermocouple_cs_pin": "D5",
-        "thermocouple_type": "K"
+        "thermocouple_type": "K",
+        "thermocouple_offset": 0.0
     },
     "safety": {
         "max_temp": 1300,
@@ -124,7 +125,10 @@ class KilnController:
         safety_config = self.config['safety']
         pid_config = self.config['pid']
         control_config = self.config['control']
-        
+
+        # Thermocouple offset for calibration
+        self.thermocouple_offset = hw_config.get('thermocouple_offset', 0.0)
+
         # Initialize SPI and MAX31856
         spi = board.SPI()
         cs_pin = hw_config['thermocouple_cs_pin']
@@ -238,6 +242,8 @@ class KilnController:
             if temp_c is None:
                 logging.error("Failed to read temperature")
                 return None
+            # Apply thermocouple offset for calibration
+            temp_c += self.thermocouple_offset
             # Convert to configured unit
             temp = self.convert_temp_from_sensor(temp_c)
             with self.state_lock:
@@ -1130,6 +1136,37 @@ def handle_display_settings():
             return jsonify({'success': True, 'message': 'Display settings updated'})
         except Exception as e:
             logging.error(f"Failed to update display settings: {e}")
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/thermocouple-offset', methods=['GET', 'POST'])
+def handle_thermocouple_offset():
+    """Get or update thermocouple offset for calibration"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    if request.method == 'GET':
+        return jsonify({'thermocouple_offset': kiln.thermocouple_offset})
+
+    elif request.method == 'POST':
+        data = request.json
+        offset = float(data.get('thermocouple_offset', 0.0))
+
+        try:
+            # Update kiln thermocouple offset
+            kiln.thermocouple_offset = offset
+
+            # Update config
+            if 'hardware' not in kiln.config:
+                kiln.config['hardware'] = {}
+            kiln.config['hardware']['thermocouple_offset'] = offset
+
+            # Save to config file
+            save_config(kiln.config)
+
+            logging.info(f"Thermocouple offset updated: {offset}°C")
+            return jsonify({'success': True, 'message': 'Thermocouple offset updated'})
+        except Exception as e:
+            logging.error(f"Failed to update thermocouple offset: {e}")
             return jsonify({'error': str(e)}), 500
 
 @app.route('/api/current-firing', methods=['GET'])

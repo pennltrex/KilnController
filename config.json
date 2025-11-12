@@ -2,7 +2,8 @@
     "hardware": {
         "relay_pin": 23,
         "thermocouple_cs_pin": "D5",
-        "thermocouple_type": "K"
+        "thermocouple_type": "K",
+        "thermocouple_offset": 0.0
     },
     "safety": {
         "max_temp": 1300,
