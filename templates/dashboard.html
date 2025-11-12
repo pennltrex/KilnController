@@ -776,6 +776,29 @@
                 </div>
 
                 <div class="card">
+                    <h2>Thermocouple Calibration</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Adjust the thermocouple offset to correct for temperature difference between sensor reading and actual kiln temperature
+                    </p>
+
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Temperature Offset (°C):</label>
+                        <input type="number" id="thermocouple-offset-input" step="0.1" value="0.0" placeholder="0.0" style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.95em; width: 100%;">
+                        <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                            Positive values increase the displayed temperature, negative values decrease it
+                        </p>
+                    </div>
+                    <button class="btn-primary" onclick="updateThermocoupleOffset()" style="width: 100%;">
+                        Apply Offset
+                    </button>
+                    <div style="margin-top: 15px; padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 6px; font-size: 0.85em;">
+                        <strong>💡 Tip:</strong> To calibrate, compare the thermocouple reading with a known accurate temperature source. If the thermocouple reads lower than actual, use a positive offset. If it reads higher, use a negative offset.
+                        <br><br>
+                        <a href="https://hotkilns.com/support/cone-offset-calculator" target="_blank" rel="noopener noreferrer" style="color: #2196f3; text-decoration: underline;">Calculate the temperature offset by cone measurement.</a>
+                    </div>
+                </div>
+
+                <div class="card">
                     <h2>Hardware Settings</h2>
                     <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
                         Hardware configuration (read-only, requires server restart to change)
@@ -1219,6 +1242,36 @@
             chart.update('none');
         }
 
+        async function updateThermocoupleOffset() {
+            const offsetInput = document.getElementById('thermocouple-offset-input');
+            const offset = parseFloat(offsetInput.value);
+
+            if (isNaN(offset)) {
+                showAlert('Please enter a valid number for the temperature offset', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/config/thermocouple-offset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        thermocouple_offset: offset
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(`Thermocouple offset updated: ${offset.toFixed(1)}°C`, 'success');
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to update thermocouple offset: ' + error.message, 'error');
+            }
+        }
+
         async function loadDisplaySettings() {
             try {
                 const response = await fetch('/api/config/display');
@@ -1285,6 +1338,10 @@
                     document.getElementById('hw-relay-pin').textContent = config.hardware.relay_pin;
                     document.getElementById('hw-tc-cs-pin').textContent = config.hardware.thermocouple_cs_pin;
                     document.getElementById('hw-tc-type').textContent = config.hardware.thermocouple_type;
+
+                    // Load thermocouple offset
+                    const offset = config.hardware.thermocouple_offset || 0.0;
+                    document.getElementById('thermocouple-offset-input').value = offset.toFixed(1);
                 }
 
                 // Load web settings (read-only)
