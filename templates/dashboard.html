@@ -782,8 +782,8 @@
                     </p>
 
                     <div class="input-group" style="margin-bottom: 15px;">
-                        <label>Temperature Offset (°C): <span id="thermocouple-offset-value">0.0</span></label>
-                        <input type="range" id="thermocouple-offset-slider" min="-50" max="50" step="0.5" value="0" style="width: 100%;">
+                        <label>Temperature Offset (°C):</label>
+                        <input type="number" id="thermocouple-offset-input" step="0.1" value="0.0" placeholder="0.0" style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.95em; width: 100%;">
                         <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
                             Positive values increase the displayed temperature, negative values decrease it
                         </p>
@@ -793,6 +793,8 @@
                     </button>
                     <div style="margin-top: 15px; padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 6px; font-size: 0.85em;">
                         <strong>💡 Tip:</strong> To calibrate, compare the thermocouple reading with a known accurate temperature source. If the thermocouple reads lower than actual, use a positive offset. If it reads higher, use a negative offset.
+                        <br><br>
+                        <a href="https://hotkilns.com/support/cone-offset-calculator" target="_blank" rel="noopener noreferrer" style="color: #2196f3; text-decoration: underline;">Calculate the temperature offset by cone measurement.</a>
                     </div>
                 </div>
 
@@ -1030,11 +1032,6 @@
             document.getElementById('graph-update-value').textContent = e.target.value;
         });
 
-        // Thermocouple offset slider update handler
-        document.getElementById('thermocouple-offset-slider').addEventListener('input', function(e) {
-            document.getElementById('thermocouple-offset-value').textContent = parseFloat(e.target.value).toFixed(1);
-        });
-
         async function updatePID() {
             const kp = parseFloat(document.getElementById('kp-slider').value);
             const ki = parseFloat(document.getElementById('ki-slider').value);
@@ -1246,7 +1243,13 @@
         }
 
         async function updateThermocoupleOffset() {
-            const offset = parseFloat(document.getElementById('thermocouple-offset-slider').value);
+            const offsetInput = document.getElementById('thermocouple-offset-input');
+            const offset = parseFloat(offsetInput.value);
+
+            if (isNaN(offset)) {
+                showAlert('Please enter a valid number for the temperature offset', 'error');
+                return;
+            }
 
             try {
                 const response = await fetch('/api/config/thermocouple-offset', {
@@ -1338,8 +1341,7 @@
 
                     // Load thermocouple offset
                     const offset = config.hardware.thermocouple_offset || 0.0;
-                    document.getElementById('thermocouple-offset-slider').value = offset;
-                    document.getElementById('thermocouple-offset-value').textContent = offset.toFixed(1);
+                    document.getElementById('thermocouple-offset-input').value = offset.toFixed(1);
                 }
 
                 // Load web settings (read-only)
