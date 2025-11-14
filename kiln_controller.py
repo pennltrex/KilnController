@@ -36,7 +36,8 @@ DEFAULT_CONFIG = {
         "relay_pin": 23,
         "thermocouple_cs_pin": "D5",
         "thermocouple_type": "K",
-        "thermocouple_offset": 0.0
+        "thermocouple_offset": 0.0,
+        "thermocouple_calibration_points": []
     },
     "safety": {
         "max_temp": 1300,
@@ -126,8 +127,14 @@ class KilnController:
         pid_config = self.config['pid']
         control_config = self.config['control']
 
-        # Thermocouple offset for calibration
+        # Thermocouple offset for calibration (legacy single-point offset)
         self.thermocouple_offset = hw_config.get('thermocouple_offset', 0.0)
+
+        # Multi-point calibration data
+        # Each point: {'sensor_temp': float, 'actual_temp': float}
+        # sensor_temp: what the thermocouple reads (in Celsius)
+        # actual_temp: what the actual temperature is (in Celsius)
+        self.calibration_points = hw_config.get('thermocouple_calibration_points', [])
 
         # Initialize SPI and MAX31856
         spi = board.SPI()
@@ -235,6 +242,64 @@ class KilnController:
             return self.fahrenheit_to_celsius(temp)
         return temp
 
+    def apply_temperature_calibration(self, sensor_temp_c):
+        """
+        Apply temperature calibration based on calibration points or legacy offset.
+
+        Args:
+            sensor_temp_c: Raw temperature reading from sensor in Celsius
+
+        Returns:
+            Calibrated temperature in Celsius
+        """
+        if sensor_temp_c is None:
+            return None
+
+        # If we have multi-point calibration data, use that
+        if self.calibration_points and len(self.calibration_points) > 0:
+            # Sort points by sensor temperature
+            sorted_points = sorted(self.calibration_points, key=lambda p: p['sensor_temp'])
+
+            # If we have only one calibration point, calculate a constant offset
+            if len(sorted_points) == 1:
+                offset = sorted_points[0]['actual_temp'] - sorted_points[0]['sensor_temp']
+                return sensor_temp_c + offset
+
+            # Find the two points that bracket the current reading
+            # If outside the calibration range, extrapolate using nearest segment
+
+            # Below the lowest calibration point
+            if sensor_temp_c <= sorted_points[0]['sensor_temp']:
+                # Use the offset from the first point
+                offset = sorted_points[0]['actual_temp'] - sorted_points[0]['sensor_temp']
+                return sensor_temp_c + offset
+
+            # Above the highest calibration point
+            if sensor_temp_c >= sorted_points[-1]['sensor_temp']:
+                # Use the offset from the last point
+                offset = sorted_points[-1]['actual_temp'] - sorted_points[-1]['sensor_temp']
+                return sensor_temp_c + offset
+
+            # Between calibration points - linear interpolation
+            for i in range(len(sorted_points) - 1):
+                p1 = sorted_points[i]
+                p2 = sorted_points[i + 1]
+
+                if p1['sensor_temp'] <= sensor_temp_c <= p2['sensor_temp']:
+                    # Linear interpolation
+                    # Calculate the fraction of the distance between p1 and p2
+                    fraction = (sensor_temp_c - p1['sensor_temp']) / (p2['sensor_temp'] - p1['sensor_temp'])
+                    # Interpolate the actual temperature
+                    calibrated_temp = p1['actual_temp'] + fraction * (p2['actual_temp'] - p1['actual_temp'])
+                    return calibrated_temp
+
+            # Fallback (should not reach here)
+            logging.warning(f"Calibration interpolation failed for {sensor_temp_c}°C, using raw value")
+            return sensor_temp_c
+
+        # Fall back to legacy single-point offset
+        return sensor_temp_c + self.thermocouple_offset
+
     def read_temperature(self):
         """Read current temperature from thermocouple"""
         try:
@@ -242,8 +307,8 @@ class KilnController:
             if temp_c is None:
                 logging.error("Failed to read temperature")
                 return None
-            # Apply thermocouple offset for calibration
-            temp_c += self.thermocouple_offset
+            # Apply multi-point calibration or legacy offset
+            temp_c = self.apply_temperature_calibration(temp_c)
             # Convert to configured unit
             temp = self.convert_temp_from_sensor(temp_c)
             with self.state_lock:
@@ -1140,7 +1205,7 @@ def handle_display_settings():
 
 @app.route('/api/config/thermocouple-offset', methods=['GET', 'POST'])
 def handle_thermocouple_offset():
-    """Get or update thermocouple offset for calibration"""
+    """Get or update thermocouple offset for calibration (legacy single-point)"""
     if not kiln:
         return jsonify({'error': 'Kiln not initialized'}), 500
 
@@ -1167,6 +1232,51 @@ def handle_thermocouple_offset():
             return jsonify({'success': True, 'message': 'Thermocouple offset updated'})
         except Exception as e:
             logging.error(f"Failed to update thermocouple offset: {e}")
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/thermocouple-calibration', methods=['GET', 'POST'])
+def handle_thermocouple_calibration():
+    """Get or update multi-point thermocouple calibration data"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    if request.method == 'GET':
+        return jsonify({
+            'calibration_points': kiln.calibration_points,
+            'legacy_offset': kiln.thermocouple_offset
+        })
+
+    elif request.method == 'POST':
+        data = request.json
+        calibration_points = data.get('calibration_points', [])
+
+        try:
+            # Validate calibration points
+            for point in calibration_points:
+                if 'sensor_temp' not in point or 'actual_temp' not in point:
+                    return jsonify({'error': 'Each calibration point must have sensor_temp and actual_temp'}), 400
+                # Ensure values are numeric
+                float(point['sensor_temp'])
+                float(point['actual_temp'])
+
+            # Update kiln calibration points
+            kiln.calibration_points = calibration_points
+
+            # Update config
+            if 'hardware' not in kiln.config:
+                kiln.config['hardware'] = {}
+            kiln.config['hardware']['thermocouple_calibration_points'] = calibration_points
+
+            # Save to config file
+            save_config(kiln.config)
+
+            logging.info(f"Thermocouple calibration updated with {len(calibration_points)} points")
+            return jsonify({'success': True, 'message': f'Calibration updated with {len(calibration_points)} points'})
+        except ValueError as e:
+            logging.error(f"Invalid calibration point values: {e}")
+            return jsonify({'error': 'Invalid numeric values in calibration points'}), 400
+        except Exception as e:
+            logging.error(f"Failed to update thermocouple calibration: {e}")
             return jsonify({'error': str(e)}), 500
 
 @app.route('/api/current-firing', methods=['GET'])

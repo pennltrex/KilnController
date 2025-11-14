@@ -778,23 +778,57 @@
                 <div class="card">
                     <h2>Thermocouple Calibration</h2>
                     <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
-                        Adjust the thermocouple offset to correct for temperature difference between sensor reading and actual kiln temperature
+                        Calibrate your thermocouple using multiple data points for non-linear correction across temperature ranges
                     </p>
 
-                    <div class="input-group" style="margin-bottom: 15px;">
-                        <label>Temperature Offset (°C):</label>
-                        <input type="number" id="thermocouple-offset-input" step="0.1" value="0.0" placeholder="0.0" style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.95em; width: 100%;">
-                        <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
-                            Positive values increase the displayed temperature, negative values decrease it
-                        </p>
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="font-size: 1em; margin-bottom: 10px;">Calibration Points</h3>
+                        <div id="calibration-points-container" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                                <thead>
+                                    <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
+                                        <th style="padding: 8px; text-align: left;">Sensor Reading (°C)</th>
+                                        <th style="padding: 8px; text-align: left;">Actual Temp (°C)</th>
+                                        <th style="padding: 8px; text-align: left;">Offset (°C)</th>
+                                        <th style="padding: 8px; text-align: center; width: 60px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="calibration-points-table">
+                                    <tr>
+                                        <td colspan="4" style="padding: 20px; text-align: center; color: #999;">
+                                            No calibration points added yet
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                            <h4 style="font-size: 0.95em; margin-bottom: 10px;">Add Calibration Point</h4>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                                <div>
+                                    <label style="display: block; font-size: 0.85em; margin-bottom: 5px; color: #666;">Sensor Reading (°C):</label>
+                                    <input type="number" id="new-sensor-temp" step="0.1" placeholder="e.g., 500" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.9em;">
+                                </div>
+                                <div>
+                                    <label style="display: block; font-size: 0.85em; margin-bottom: 5px; color: #666;">Actual Temperature (°C):</label>
+                                    <input type="number" id="new-actual-temp" step="0.1" placeholder="e.g., 510" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.9em;">
+                                </div>
+                            </div>
+                            <button class="btn-primary" onclick="addCalibrationPoint()" style="width: 100%;">
+                                Add Point
+                            </button>
+                        </div>
+
+                        <button class="btn-primary" onclick="saveCalibrationPoints()" style="width: 100%; background: #4caf50;">
+                            Save Calibration
+                        </button>
                     </div>
-                    <button class="btn-primary" onclick="updateThermocoupleOffset()" style="width: 100%;">
-                        Apply Offset
-                    </button>
-                    <div style="margin-top: 15px; padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 6px; font-size: 0.85em;">
-                        <strong>💡 Tip:</strong> To calibrate, compare the thermocouple reading with a known accurate temperature source. If the thermocouple reads lower than actual, use a positive offset. If it reads higher, use a negative offset.
+
+                    <div style="padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 6px; font-size: 0.85em;">
+                        <strong>How it works:</strong> Add calibration points by comparing sensor readings with known accurate temperatures (e.g., from pyrometric cones, reference thermometer, or cone offset calculator). The system will interpolate between points for non-linear correction.
                         <br><br>
-                        <a href="https://hotkilns.com/support/cone-offset-calculator" target="_blank" rel="noopener noreferrer" style="color: #2196f3; text-decoration: underline;">Calculate the temperature offset by cone measurement.</a>
+                        <a href="https://hotkilns.com/support/cone-offset-calculator" target="_blank" rel="noopener noreferrer" style="color: #2196f3; text-decoration: underline;">Calculate temperature offsets using cone measurements.</a>
                     </div>
                 </div>
 
@@ -1242,33 +1276,126 @@
             chart.update('none');
         }
 
-        async function updateThermocoupleOffset() {
-            const offsetInput = document.getElementById('thermocouple-offset-input');
-            const offset = parseFloat(offsetInput.value);
+        // Calibration points management
+        let calibrationPoints = [];
 
-            if (isNaN(offset)) {
-                showAlert('Please enter a valid number for the temperature offset', 'error');
+        async function loadCalibrationPoints() {
+            try {
+                const response = await fetch('/api/config/thermocouple-calibration');
+                const data = await response.json();
+
+                calibrationPoints = data.calibration_points || [];
+                renderCalibrationPointsTable();
+            } catch (error) {
+                console.error('Failed to load calibration points:', error);
+            }
+        }
+
+        function renderCalibrationPointsTable() {
+            const tbody = document.getElementById('calibration-points-table');
+
+            if (calibrationPoints.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="padding: 20px; text-align: center; color: #999;">
+                            No calibration points added yet
+                        </td>
+                    </tr>
+                `;
                 return;
             }
 
+            // Sort by sensor temperature
+            const sortedPoints = [...calibrationPoints].sort((a, b) => a.sensor_temp - b.sensor_temp);
+
+            tbody.innerHTML = sortedPoints.map((point, index) => {
+                const offset = (point.actual_temp - point.sensor_temp).toFixed(1);
+                const offsetColor = offset >= 0 ? '#4caf50' : '#f44336';
+                return `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px;">${point.sensor_temp.toFixed(1)}</td>
+                        <td style="padding: 8px;">${point.actual_temp.toFixed(1)}</td>
+                        <td style="padding: 8px; color: ${offsetColor}; font-weight: 500;">
+                            ${offset >= 0 ? '+' : ''}${offset}
+                        </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <button onclick="deleteCalibrationPoint(${index})"
+                                    style="background: #f44336; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 0.85em;"
+                                    title="Delete this point">
+                                ✕
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function addCalibrationPoint() {
+            const sensorTemp = parseFloat(document.getElementById('new-sensor-temp').value);
+            const actualTemp = parseFloat(document.getElementById('new-actual-temp').value);
+
+            if (isNaN(sensorTemp) || isNaN(actualTemp)) {
+                showAlert('Please enter valid numbers for both sensor reading and actual temperature', 'error');
+                return;
+            }
+
+            // Check if a point with this sensor temp already exists
+            const existingIndex = calibrationPoints.findIndex(p => Math.abs(p.sensor_temp - sensorTemp) < 0.1);
+            if (existingIndex >= 0) {
+                showAlert('A calibration point already exists at this sensor temperature. Delete it first to replace.', 'error');
+                return;
+            }
+
+            calibrationPoints.push({
+                sensor_temp: sensorTemp,
+                actual_temp: actualTemp
+            });
+
+            renderCalibrationPointsTable();
+
+            // Clear inputs
+            document.getElementById('new-sensor-temp').value = '';
+            document.getElementById('new-actual-temp').value = '';
+
+            showAlert('Calibration point added. Click "Save Calibration" to apply changes.', 'info');
+        }
+
+        function deleteCalibrationPoint(index) {
+            const sortedPoints = [...calibrationPoints].sort((a, b) => a.sensor_temp - b.sensor_temp);
+            const pointToDelete = sortedPoints[index];
+
+            // Find and remove the point from the original array
+            const originalIndex = calibrationPoints.findIndex(
+                p => p.sensor_temp === pointToDelete.sensor_temp && p.actual_temp === pointToDelete.actual_temp
+            );
+
+            if (originalIndex >= 0) {
+                calibrationPoints.splice(originalIndex, 1);
+                renderCalibrationPointsTable();
+                showAlert('Calibration point removed. Click "Save Calibration" to apply changes.', 'info');
+            }
+        }
+
+        async function saveCalibrationPoints() {
             try {
-                const response = await fetch('/api/config/thermocouple-offset', {
+                const response = await fetch('/api/config/thermocouple-calibration', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        thermocouple_offset: offset
+                        calibration_points: calibrationPoints
                     })
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    showAlert(`Thermocouple offset updated: ${offset.toFixed(1)}°C`, 'success');
+                    showAlert(data.message, 'success');
+                    await loadCalibrationPoints(); // Reload to confirm
                 } else {
                     showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                showAlert('Failed to update thermocouple offset: ' + error.message, 'error');
+                showAlert('Failed to save calibration points: ' + error.message, 'error');
             }
         }
 
@@ -1338,11 +1465,10 @@
                     document.getElementById('hw-relay-pin').textContent = config.hardware.relay_pin;
                     document.getElementById('hw-tc-cs-pin').textContent = config.hardware.thermocouple_cs_pin;
                     document.getElementById('hw-tc-type').textContent = config.hardware.thermocouple_type;
-
-                    // Load thermocouple offset
-                    const offset = config.hardware.thermocouple_offset || 0.0;
-                    document.getElementById('thermocouple-offset-input').value = offset.toFixed(1);
                 }
+
+                // Load calibration points
+                await loadCalibrationPoints();
 
                 // Load web settings (read-only)
                 if (config.web) {
