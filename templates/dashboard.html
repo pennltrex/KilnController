@@ -7,6 +7,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script>
+        // Verify zoom plugin is loaded
+        console.log('Chart.js version:', Chart.version);
+        console.log('Zoom plugin available:', typeof Chart !== 'undefined' && Chart.registry && Chart.registry.plugins.get('zoom'));
+    </script>
     <style>
         * {
             margin: 0;
@@ -694,13 +699,13 @@
                 <div class="card chart-card">
                     <h2>Temperature History</h2>
                     <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
-                        <button class="btn-secondary btn-small" onclick="chart.resetZoom()" title="Reset to full view">
+                        <button class="btn-secondary btn-small" onclick="resetChartZoom()" title="Reset to full view">
                             Reset Zoom
                         </button>
-                        <button class="btn-secondary btn-small" onclick="chart.zoom(1.2)" title="Zoom in">
+                        <button class="btn-secondary btn-small" onclick="zoomChartIn()" title="Zoom in">
                             Zoom In
                         </button>
-                        <button class="btn-secondary btn-small" onclick="chart.zoom(0.8)" title="Zoom out">
+                        <button class="btn-secondary btn-small" onclick="zoomChartOut()" title="Zoom out">
                             Zoom Out
                         </button>
                         <div style="border-left: 2px solid #ddd; height: 30px; margin: 0 5px;"></div>
@@ -747,13 +752,13 @@
                     </div>
 
                     <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
-                        <button class="btn-secondary btn-small" onclick="firingHistoryChart && firingHistoryChart.resetZoom()" title="Reset to full view">
+                        <button class="btn-secondary btn-small" onclick="resetHistoryZoom()" title="Reset to full view">
                             Reset Zoom
                         </button>
-                        <button class="btn-secondary btn-small" onclick="firingHistoryChart && firingHistoryChart.zoom(1.2)" title="Zoom in">
+                        <button class="btn-secondary btn-small" onclick="zoomHistoryIn()" title="Zoom in">
                             Zoom In
                         </button>
-                        <button class="btn-secondary btn-small" onclick="firingHistoryChart && firingHistoryChart.zoom(0.8)" title="Zoom out">
+                        <button class="btn-secondary btn-small" onclick="zoomHistoryOut()" title="Zoom out">
                             Zoom Out
                         </button>
                     </div>
@@ -1150,19 +1155,20 @@
                                 enabled: true,
                                 backgroundColor: 'rgba(102, 126, 234, 0.2)',
                                 borderColor: 'rgb(102, 126, 234)',
-                                borderWidth: 1
+                                borderWidth: 1,
+                                modifierKey: null
                             },
                             mode: 'x'
                         },
                         pan: {
                             enabled: true,
-                            mode: 'x'
+                            mode: 'x',
+                            modifierKey: null
                         },
                         limits: {
                             x: {
                                 min: 'original',
-                                max: 'original',
-                                minRange: 60000
+                                max: 'original'
                             }
                         }
                     }
@@ -1541,6 +1547,36 @@
             // Update chart axis label
             chart.options.scales.y.title.text = getTempLabel();
             chart.update('none');
+        }
+
+        function resetChartZoom() {
+            chart.resetZoom();
+        }
+
+        function zoomChartIn() {
+            chart.zoom(1.2);
+        }
+
+        function zoomChartOut() {
+            chart.zoom(0.8);
+        }
+
+        function resetHistoryZoom() {
+            if (firingHistoryChart) {
+                firingHistoryChart.resetZoom();
+            }
+        }
+
+        function zoomHistoryIn() {
+            if (firingHistoryChart) {
+                firingHistoryChart.zoom(1.2);
+            }
+        }
+
+        function zoomHistoryOut() {
+            if (firingHistoryChart) {
+                firingHistoryChart.zoom(0.8);
+            }
         }
 
         function zoomToPreset(minutes) {
@@ -2928,19 +2964,20 @@
                                         enabled: true,
                                         backgroundColor: 'rgba(102, 126, 234, 0.2)',
                                         borderColor: 'rgb(102, 126, 234)',
-                                        borderWidth: 1
+                                        borderWidth: 1,
+                                        modifierKey: null
                                     },
                                     mode: 'x'
                                 },
                                 pan: {
                                     enabled: true,
-                                    mode: 'x'
+                                    mode: 'x',
+                                    modifierKey: null
                                 },
                                 limits: {
                                     x: {
                                         min: 'original',
-                                        max: 'original',
-                                        minRange: 60000
+                                        max: 'original'
                                     }
                                 }
                             }
