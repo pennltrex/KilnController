@@ -2851,7 +2851,44 @@
 
                     // Update the active schedule display
                     const scheduleName = `Cone ${cone} (${speed})`;
-                    await displayScheduleSummary(scheduleName);
+                    document.getElementById('active-schedule-name').textContent = scheduleName;
+
+                    let totalScheduleTime = 0;
+                    let summaryHTML = '<div style="margin-top: 10px;">';
+
+                    schedule.forEach((segment, index) => {
+                        const startTemp = index === 0 ? 20 : schedule[index - 1].target;
+                        const rampTime = Math.abs(segment.target - startTemp) / segment.rate * 60;
+                        const totalSegmentTime = rampTime + segment.hold;
+                        totalScheduleTime += totalSegmentTime;
+
+                        const rateDisplay = temperatureUnit === 'F'
+                            ? (segment.rate * 9/5).toFixed(0)
+                            : segment.rate;
+                        const targetDisplay = formatTemp(segment.target, temperatureUnit);
+
+                        summaryHTML += `
+                            <div class="schedule-segment-item">
+                                <div class="segment-title">Segment ${index + 1}</div>
+                                <div class="segment-details">
+                                    Rate: ${rateDisplay}${getTempUnit()}/hr → Target: ${targetDisplay}${getTempUnit()}
+                                    ${segment.hold > 0 ? ` → Hold: ${segment.hold} min` : ''}
+                                </div>
+                                <div class="segment-time">
+                                    Est. time: ${Math.round(totalSegmentTime)} minutes
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    summaryHTML += `
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 2px solid #ddd; font-weight: bold; color: #333;">
+                            Total estimated time: ${Math.round(totalScheduleTime)} minutes (${(totalScheduleTime / 60).toFixed(1)} hours)
+                        </div>
+                    `;
+                    summaryHTML += '</div>';
+
+                    document.getElementById('active-schedule-summary').innerHTML = summaryHTML;
 
                     // Enable start button
                     document.getElementById('start-btn').disabled = false;
