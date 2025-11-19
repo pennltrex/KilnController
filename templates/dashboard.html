@@ -2814,9 +2814,16 @@
                 const data = await response.json();
 
                 if (response.ok) {
+                    // Store the schedule data
+                    const schedule = data.schedule;
+                    loadedScheduleData = schedule;
+                    currentScheduleName = data.message;
+
+                    // Initialize chart for the schedule
+                    initializeChartForSchedule(schedule);
+
                     // Show success message
                     const infoDiv = document.getElementById('cone-fire-info');
-                    const schedule = data.schedule;
 
                     // Calculate total firing time
                     let totalTime = 0;
@@ -2842,8 +2849,14 @@
                         </div>
                     `;
 
+                    // Update the active schedule display
+                    const scheduleName = `Cone ${cone} (${speed})`;
+                    await displayScheduleSummary(scheduleName);
+
                     // Enable start button
                     document.getElementById('start-btn').disabled = false;
+
+                    showAlert(`Cone ${cone} schedule loaded successfully`, 'success');
                 } else {
                     alert('Error: ' + data.error);
                 }
