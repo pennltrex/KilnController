@@ -602,6 +602,49 @@
                 </div>
 
                 <div class="card">
+                    <h2>🔥 Cone Fire Mode</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Automatically generate a firing schedule based on cone number and firing speed
+                    </p>
+                    <div class="input-group">
+                        <label>Cone Number:</label>
+                        <select id="cone-select">
+                            <option value="">-- Select Cone --</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Firing Speed:</label>
+                        <select id="speed-select">
+                            <option value="slow">Slow (44°C/hr final) - Delicate work</option>
+                            <option value="medium" selected>Medium (67°C/hr final) - Standard</option>
+                            <option value="fast">Fast (111°C/hr final) - Quick firing</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Preheat/Candling (hours):</label>
+                        <input type="number" id="preheat-input" value="0" min="0" max="12" step="0.5" placeholder="0">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Optional low-temperature hold for water smoking and burnout
+                        </small>
+                    </div>
+                    <div class="input-group">
+                        <label>Hold at Peak (minutes):</label>
+                        <input type="number" id="hold-input" value="0" min="0" max="120" step="5" placeholder="0">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Hold time at target temperature (typical: 10-30 minutes)
+                        </small>
+                    </div>
+                    <div class="controls">
+                        <button class="btn-primary" onclick="loadConeFireSchedule()">
+                            Generate & Load Schedule
+                        </button>
+                    </div>
+                    <div id="cone-fire-info" style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px; display: none;">
+                        <!-- Cone fire info will be displayed here -->
+                    </div>
+                </div>
+
+                <div class="card">
                     <h2>Firing Schedules</h2>
                     <div class="schedule-list" id="schedule-list">
                         <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
@@ -2728,6 +2771,107 @@
         }
 
         // Initialize on page load
+        // Load available cone list
+        async function loadConeList() {
+            console.log('Loading cone list...');
+            try {
+                const response = await fetch('/api/cones');
+                const cones = await response.json();
+
+                const coneSelect = document.getElementById('cone-select');
+                if (!coneSelect) {
+                    console.error('Could not find cone-select element');
+                    return;
+                }
+
+                coneSelect.innerHTML = '<option value="">-- Select Cone --</option>';
+
+                cones.forEach(cone => {
+                    const option = document.createElement('option');
+                    option.value = cone.name;
+                    const tempDisplay = formatTemp(cone.temperature_c, temperatureUnit);
+                    option.textContent = `Cone ${cone.name} (${tempDisplay}${getTempUnit()})`;
+                    coneSelect.appendChild(option);
+                });
+
+                console.log(`Loaded ${cones.length} cones`);
+            } catch (error) {
+                console.error('Failed to load cones:', error);
+                alert('Failed to load cone list');
+            }
+        }
+
+        // Generate and load a cone fire schedule
+        async function loadConeFireSchedule() {
+            const cone = document.getElementById('cone-select').value;
+            const speed = document.getElementById('speed-select').value;
+            const preheat = parseFloat(document.getElementById('preheat-input').value) || 0;
+            const hold = parseInt(document.getElementById('hold-input').value) || 0;
+
+            if (!cone) {
+                alert('Please select a cone number');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/cone-fire', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        cone: cone,
+                        speed: speed,
+                        preheat: preheat,
+                        hold: hold
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Show success message
+                    const infoDiv = document.getElementById('cone-fire-info');
+                    const schedule = data.schedule;
+
+                    // Calculate total firing time
+                    let totalTime = 0;
+                    schedule.forEach(seg => {
+                        const rampTime = Math.abs(seg.target - 20) / (seg.rate / 60); // Rough estimate in minutes
+                        totalTime += rampTime + seg.hold;
+                    });
+
+                    infoDiv.style.display = 'block';
+                    infoDiv.innerHTML = `
+                        <strong>✓ ${data.message}</strong><br>
+                        <div style="margin-top: 10px;">
+                            <strong>Schedule Details:</strong><br>
+                            • ${schedule.length} segments<br>
+                            • Estimated time: ${(totalTime / 60).toFixed(1)} hours<br>
+                            • Max temp: ${formatTemp(schedule[schedule.length-1].target, temperatureUnit)}${getTempUnit()}<br>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <strong>Segments:</strong><br>
+                            ${schedule.map((seg, i) =>
+                                `${i+1}. Ramp at ${formatTemp(seg.rate, temperatureUnit)}${getTempUnit()}/hr to ${formatTemp(seg.target, temperatureUnit)}${getTempUnit()}, hold ${seg.hold} min`
+                            ).join('<br>')}
+                        </div>
+                    `;
+
+                    // Update the active schedule display
+                    await displayActiveFiringSchedule();
+
+                    // Enable start button
+                    document.getElementById('start-btn').disabled = false;
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to generate cone fire schedule:', error);
+                alert('Failed to generate cone fire schedule');
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Initializing kiln controller dashboard...');
             console.log('Checking for elements:');
@@ -2736,6 +2880,7 @@
 
             setTimeout(() => {
                 loadScheduleList();
+                loadConeList(); // Load cone list for cone fire mode
                 loadPIDSettings();
                 loadAllSettings(); // This loads temperature unit preference from config
                 loadKilnSitterSettings();
