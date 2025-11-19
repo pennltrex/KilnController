@@ -486,6 +486,7 @@
         
         <div class="tabs">
             <button class="tab-button active" onclick="switchTab('dashboard')">Dashboard</button>
+            <button class="tab-button" onclick="switchTab('history')">Firing History</button>
             <button class="tab-button" onclick="switchTab('settings')">Settings</button>
         </div>
         
@@ -642,7 +643,46 @@
                 </div>
             </div>
         </div>
-        
+
+        <div id="history-tab" class="tab-content">
+            <div class="dashboard">
+                <div class="card" style="grid-column: 1 / -1;">
+                    <h2>Past Firings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        View and review data from completed firings
+                    </p>
+
+                    <div id="firings-list" style="max-height: 600px; overflow-y: auto;">
+                        <div style="text-align: center; padding: 40px; color: #999;">
+                            Loading firing history...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" id="firing-detail-card" style="grid-column: 1 / -1; display: none;">
+                    <h2>Firing Details: <span id="firing-detail-name">--</span></h2>
+                    <button class="btn-secondary" onclick="closeFiringDetail()" style="margin-bottom: 15px;">
+                        ← Back to List
+                    </button>
+
+                    <div id="firing-summary" style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+                        <!-- Summary will be populated dynamically -->
+                    </div>
+
+                    <div class="chart-container" style="margin-bottom: 20px;">
+                        <canvas id="firingHistoryChart"></canvas>
+                    </div>
+
+                    <div style="margin-top: 15px;">
+                        <h3 style="font-size: 1.1em; margin-bottom: 10px;">Data Points</h3>
+                        <div id="firing-data-table" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Data table will be populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="settings-tab" class="tab-content">
             <div class="dashboard">
                 <div class="card">
@@ -744,6 +784,55 @@
                     <button class="btn-primary" onclick="updateControlSettings()" style="width: 100%;">
                         Apply Control Settings
                     </button>
+                </div>
+
+                <div class="card">
+                    <h2>Kiln Sitter Settings</h2>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                        Configure automatic shutdown detection for kiln sitter operation
+                    </p>
+
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="kiln-sitter-mode" style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span>Enable Kiln Sitter Mode</span>
+                        </label>
+                        <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                            Automatically detects when kiln sitter has shut off the kiln and ends the firing schedule
+                        </p>
+                    </div>
+
+                    <div id="kiln-sitter-advanced" style="display: none;">
+                        <div class="input-group" style="margin-bottom: 10px;">
+                            <label>Detection Threshold (%): <span id="ks-detection-threshold-value">10.0</span></label>
+                            <input type="range" id="ks-detection-threshold-slider" min="5" max="50" step="5" value="10" style="width: 100%;">
+                            <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                                Minimum relay output to consider kiln as "trying to heat"
+                            </p>
+                        </div>
+                        <div class="input-group" style="margin-bottom: 10px;">
+                            <label>Temp Drop Threshold (°C): <span id="ks-temp-drop-value">5.0</span></label>
+                            <input type="range" id="ks-temp-drop-slider" min="1" max="20" step="1" value="5" style="width: 100%;">
+                            <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                                Temperature drop required to detect kiln sitter shutdown
+                            </p>
+                        </div>
+                        <div class="input-group" style="margin-bottom: 15px;">
+                            <label>Check Window (cycles): <span id="ks-check-window-value">3</span></label>
+                            <input type="range" id="ks-check-window-slider" min="2" max="10" step="1" value="3" style="width: 100%;">
+                            <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                                Number of temperature readings to compare (each ~10 seconds)
+                            </p>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" onclick="updateKilnSitterSettings()" style="width: 100%;">
+                        Apply Kiln Sitter Settings
+                    </button>
+
+                    <div style="margin-top: 15px; padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 6px; font-size: 0.85em;">
+                        <strong>How it works:</strong> When enabled, the system monitors temperature during firing. If temperature drops while the relay is trying to heat, the system detects that the kiln sitter has mechanically shut off the kiln and automatically ends the firing schedule, logging peak temperature and cone data.
+                    </div>
                 </div>
 
                 <div class="card">
@@ -979,6 +1068,11 @@
 
             // Activate button
             event.target.classList.add('active');
+
+            // Load data when switching to history tab
+            if (tabName === 'history') {
+                loadFiringHistory();
+            }
         }
 
         // Temperature conversion functions
@@ -2377,6 +2471,262 @@
             return `${minutes}m`;
         }
 
+        // Kiln Sitter Settings Functions
+        async function loadKilnSitterSettings() {
+            try {
+                const response = await fetch('/api/config/kiln-sitter');
+                const data = await response.json();
+
+                const kilnSitterMode = document.getElementById('kiln-sitter-mode');
+                kilnSitterMode.checked = data.kiln_sitter_mode;
+
+                document.getElementById('ks-detection-threshold-slider').value = data.kiln_sitter_detection_threshold;
+                document.getElementById('ks-detection-threshold-value').textContent = data.kiln_sitter_detection_threshold.toFixed(1);
+
+                document.getElementById('ks-temp-drop-slider').value = data.kiln_sitter_temp_drop_threshold;
+                document.getElementById('ks-temp-drop-value').textContent = data.kiln_sitter_temp_drop_threshold.toFixed(1);
+
+                document.getElementById('ks-check-window-slider').value = data.kiln_sitter_check_window;
+                document.getElementById('ks-check-window-value').textContent = data.kiln_sitter_check_window;
+
+                // Toggle advanced settings visibility
+                toggleKilnSitterAdvanced();
+            } catch (error) {
+                console.error('Failed to load kiln sitter settings:', error);
+            }
+        }
+
+        function toggleKilnSitterAdvanced() {
+            const kilnSitterMode = document.getElementById('kiln-sitter-mode').checked;
+            const advancedDiv = document.getElementById('kiln-sitter-advanced');
+            advancedDiv.style.display = kilnSitterMode ? 'block' : 'none';
+        }
+
+        async function updateKilnSitterSettings() {
+            const kilnSitterMode = document.getElementById('kiln-sitter-mode').checked;
+            const detectionThreshold = parseFloat(document.getElementById('ks-detection-threshold-slider').value);
+            const tempDropThreshold = parseFloat(document.getElementById('ks-temp-drop-slider').value);
+            const checkWindow = parseInt(document.getElementById('ks-check-window-slider').value);
+
+            try {
+                const response = await fetch('/api/config/kiln-sitter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        kiln_sitter_mode: kilnSitterMode,
+                        kiln_sitter_detection_threshold: detectionThreshold,
+                        kiln_sitter_temp_drop_threshold: tempDropThreshold,
+                        kiln_sitter_check_window: checkWindow
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Kiln sitter settings updated successfully', 'success');
+                } else {
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to update kiln sitter settings: ' + error.message, 'error');
+            }
+        }
+
+        // Firing History Functions
+        let firingHistoryChart = null;
+
+        async function loadFiringHistory() {
+            try {
+                const response = await fetch('/api/firings');
+                const firings = await response.json();
+
+                const firingsListDiv = document.getElementById('firings-list');
+
+                if (firings.length === 0) {
+                    firingsListDiv.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #999;">
+                            No firing history found. Complete a firing to see it here.
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                for (const firing of firings) {
+                    const startDate = new Date(firing.start_time);
+                    const kiln_sitter_badge = firing.kiln_sitter_triggered ?
+                        '<span style="background: #ff9800; color: white; padding: 2px 8px; border-radius: 3px; font-size: 0.8em; margin-left: 10px;">Kiln Sitter</span>' : '';
+
+                    html += `
+                        <div class="schedule-item" onclick="viewFiringDetail('${firing.filename}')" style="cursor: pointer;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <strong>${firing.schedule_name}</strong>
+                                ${kiln_sitter_badge}
+                            </div>
+                            <div style="font-size: 0.9em; color: #666; margin-bottom: 8px;">
+                                ${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString()}
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 0.85em;">
+                                <div>
+                                    <span style="color: #999;">Peak:</span>
+                                    <strong>${firing.peak_temp.toFixed(1)}°C</strong>
+                                </div>
+                                <div>
+                                    <span style="color: #999;">Cone:</span>
+                                    <strong>${firing.peak_cone || 'N/A'}</strong>
+                                </div>
+                                <div>
+                                    <span style="color: #999;">Duration:</span>
+                                    <strong>${firing.duration_hours.toFixed(1)}h</strong>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                firingsListDiv.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to load firing history:', error);
+                document.getElementById('firings-list').innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #e74c3c;">
+                        Failed to load firing history: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function viewFiringDetail(filename) {
+            try {
+                const response = await fetch(`/api/firings/${filename}`);
+                const firingData = await response.json();
+
+                const summary = firingData.summary;
+                const dataLog = firingData.data_log;
+
+                // Hide list, show detail
+                document.querySelector('#history-tab .card:first-child').style.display = 'none';
+                document.getElementById('firing-detail-card').style.display = 'block';
+
+                // Set detail name
+                document.getElementById('firing-detail-name').textContent = summary.schedule_name || 'Unknown';
+
+                // Build summary HTML
+                const startDate = new Date(summary.start_time);
+                const endDate = new Date(summary.end_time);
+                const kiln_sitter_info = summary.kiln_sitter_triggered ?
+                    '<div class="info-row"><span class="info-label">Kiln Sitter:</span><span class="info-value" style="color: #ff9800;">Triggered</span></div>' : '';
+
+                const summaryHtml = `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                        <div class="info-row">
+                            <span class="info-label">Start Time:</span>
+                            <span class="info-value">${startDate.toLocaleString()}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">End Time:</span>
+                            <span class="info-value">${endDate.toLocaleString()}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Duration:</span>
+                            <span class="info-value">${summary.duration_hours.toFixed(1)} hours</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Peak Temperature:</span>
+                            <span class="info-value">${summary.peak_temp.toFixed(1)}°C</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Peak Cone:</span>
+                            <span class="info-value">${summary.peak_cone || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Average Rate:</span>
+                            <span class="info-value">${summary.average_rate.toFixed(1)}°C/hr</span>
+                        </div>
+                        ${kiln_sitter_info}
+                        <div class="info-row">
+                            <span class="info-label">Data Points:</span>
+                            <span class="info-value">${summary.total_data_points}</span>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('firing-summary').innerHTML = summaryHtml;
+
+                // Create chart
+                const ctx = document.getElementById('firingHistoryChart').getContext('2d');
+
+                // Destroy existing chart if it exists
+                if (firingHistoryChart) {
+                    firingHistoryChart.destroy();
+                }
+
+                const labels = dataLog.map(entry => {
+                    const hours = entry.elapsed / 3600;
+                    return hours.toFixed(1);
+                });
+
+                const temps = dataLog.map(entry => entry.temp);
+                const setpoints = dataLog.map(entry => entry.setpoint);
+
+                firingHistoryChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Temperature',
+                            data: temps,
+                            borderColor: '#764ba2',
+                            backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true
+                        }, {
+                            label: 'Setpoint',
+                            data: setpoints,
+                            borderColor: '#667eea',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.4,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Time (hours)'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Temperature (°C)'
+                                }
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Failed to load firing detail:', error);
+                showAlert('Failed to load firing detail: ' + error.message, 'error');
+            }
+        }
+
+        function closeFiringDetail() {
+            document.querySelector('#history-tab .card:first-child').style.display = 'block';
+            document.getElementById('firing-detail-card').style.display = 'none';
+
+            // Destroy chart
+            if (firingHistoryChart) {
+                firingHistoryChart.destroy();
+                firingHistoryChart = null;
+            }
+        }
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Initializing kiln controller dashboard...');
@@ -2388,8 +2738,34 @@
                 loadScheduleList();
                 loadPIDSettings();
                 loadAllSettings(); // This loads temperature unit preference from config
+                loadKilnSitterSettings();
                 checkResumeState();
             }, 100);
+
+            // Add event listeners for kiln sitter settings
+            const kilnSitterMode = document.getElementById('kiln-sitter-mode');
+            if (kilnSitterMode) {
+                kilnSitterMode.addEventListener('change', toggleKilnSitterAdvanced);
+            }
+
+            // Add event listeners for sliders
+            const sliders = [
+                'ks-detection-threshold-slider',
+                'ks-temp-drop-slider',
+                'ks-check-window-slider'
+            ];
+            sliders.forEach(sliderId => {
+                const slider = document.getElementById(sliderId);
+                if (slider) {
+                    slider.addEventListener('input', function() {
+                        const valueId = sliderId.replace('-slider', '-value');
+                        const valueSpan = document.getElementById(valueId);
+                        if (valueSpan) {
+                            valueSpan.textContent = this.value;
+                        }
+                    });
+                }
+            });
 
             updateStatus();
             setInterval(updateStatus, 2000);
