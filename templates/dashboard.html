@@ -558,7 +558,7 @@
                 </div>
 
                 <div class="card" id="resume-card" style="display: none; border: 2px solid #f59e0b; background: #fef3c7;">
-                    <h2 style="color: #f59e0b;">⚠️ Resume Interrupted Firing</h2>
+                    <h2 style="color: #f59e0b;">Resume Interrupted Firing</h2>
                     <p style="color: #92400e; margin-bottom: 10px;">
                         A previous firing was interrupted. You can resume from where it left off.
                     </p>
@@ -597,62 +597,73 @@
                         </button>
                     </div>
                     <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
-                        ⚠️ Select a schedule before starting
+                        Select a schedule before starting
                     </p>
-                </div>
-
-                <div class="card">
-                    <h2>🔥 Cone Fire Mode</h2>
-                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
-                        Automatically generate a firing schedule based on cone number and firing speed
-                    </p>
-                    <div class="input-group">
-                        <label>Cone Number:</label>
-                        <select id="cone-select">
-                            <option value="">-- Select Cone --</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label>Firing Speed:</label>
-                        <select id="speed-select">
-                            <option value="slow">Slow (44°C/hr final) - Delicate work</option>
-                            <option value="medium" selected>Medium (67°C/hr final) - Standard</option>
-                            <option value="fast">Fast (111°C/hr final) - Quick firing</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label>Preheat/Candling (hours):</label>
-                        <input type="number" id="preheat-input" value="0" min="0" max="12" step="0.5" placeholder="0">
-                        <small style="color: #666; display: block; margin-top: 5px;">
-                            Optional low-temperature hold for water smoking and burnout
-                        </small>
-                    </div>
-                    <div class="input-group">
-                        <label>Hold at Peak (minutes):</label>
-                        <input type="number" id="hold-input" value="0" min="0" max="120" step="5" placeholder="0">
-                        <small style="color: #666; display: block; margin-top: 5px;">
-                            Hold time at target temperature (typical: 10-30 minutes)
-                        </small>
-                    </div>
-                    <div class="controls">
-                        <button class="btn-primary" onclick="loadConeFireSchedule()">
-                            Generate & Load Schedule
-                        </button>
-                    </div>
-                    <div id="cone-fire-info" style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px; display: none;">
-                        <!-- Cone fire info will be displayed here -->
-                    </div>
                 </div>
 
                 <div class="card">
                     <h2>Firing Schedules</h2>
-                    <div class="schedule-list" id="schedule-list">
-                        <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
-                    </div>
-                    <div class="controls">
-                        <button class="btn-primary" onclick="showScheduleEditor()">
-                            Create New Schedule
+
+                    <!-- Mode toggle -->
+                    <div style="margin-bottom: 20px; display: flex; gap: 10px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                        <button id="saved-schedules-tab" class="btn-primary" onclick="switchScheduleMode('saved')" style="flex: 1;">
+                            Saved Schedules
                         </button>
+                        <button id="cone-fire-tab" class="btn-primary" onclick="switchScheduleMode('cone-fire')" style="flex: 1; background: #6c757d;">
+                            Cone Fire Mode
+                        </button>
+                    </div>
+
+                    <!-- Saved Schedules Mode -->
+                    <div id="saved-schedules-mode">
+                        <div class="schedule-list" id="schedule-list">
+                            <p style="color: #999; text-align: center; padding: 20px;">Loading schedules...</p>
+                        </div>
+                        <div class="controls">
+                            <button class="btn-primary" onclick="showScheduleEditor()">
+                                Create New Schedule
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Cone Fire Mode -->
+                    <div id="cone-fire-mode" style="display: none;">
+                        <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                            Automatically generate a firing schedule based on cone number and firing speed
+                        </p>
+                        <div class="input-group">
+                            <label>Cone Number:</label>
+                            <select id="cone-select">
+                                <option value="">-- Select Cone --</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Firing Speed:</label>
+                            <select id="speed-select">
+                                <option value="slow">Slow (44°C/hr final) - Delicate work</option>
+                                <option value="medium" selected>Medium (67°C/hr final) - Standard</option>
+                                <option value="fast">Fast (111°C/hr final) - Quick firing</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Preheat/Candling (hours):</label>
+                            <input type="number" id="preheat-input" value="0" min="0" max="12" step="0.5" placeholder="0">
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                Optional low-temperature hold for water smoking and burnout
+                            </small>
+                        </div>
+                        <div class="input-group">
+                            <label>Hold at Peak (minutes):</label>
+                            <input type="number" id="hold-input" value="0" min="0" max="120" step="5" placeholder="0">
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                Hold time at target temperature (typical: 10-30 minutes)
+                            </small>
+                        </div>
+                        <div class="controls">
+                            <button class="btn-primary" onclick="loadConeFireSchedule()">
+                                Generate & Load Schedule
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -806,7 +817,7 @@
                         Apply Safety Settings
                     </button>
                     <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 6px; font-size: 0.85em;">
-                        <strong>⚠️ Warning:</strong> Safety settings protect your kiln from overheating. Only change these if you understand the implications.
+                        <strong>Warning:</strong> Safety settings protect your kiln from overheating. Only change these if you understand the implications.
                     </div>
                 </div>
 
@@ -2757,6 +2768,26 @@
             }
         }
 
+        // Switch between saved schedules and cone fire mode
+        function switchScheduleMode(mode) {
+            const savedMode = document.getElementById('saved-schedules-mode');
+            const coneFireMode = document.getElementById('cone-fire-mode');
+            const savedTab = document.getElementById('saved-schedules-tab');
+            const coneFireTab = document.getElementById('cone-fire-tab');
+
+            if (mode === 'saved') {
+                savedMode.style.display = 'block';
+                coneFireMode.style.display = 'none';
+                savedTab.style.background = '#007bff';
+                coneFireTab.style.background = '#6c757d';
+            } else {
+                savedMode.style.display = 'none';
+                coneFireMode.style.display = 'block';
+                savedTab.style.background = '#6c757d';
+                coneFireTab.style.background = '#007bff';
+            }
+        }
+
         // Initialize on page load
         // Load available cone list
         async function loadConeList() {
@@ -2821,33 +2852,6 @@
 
                     // Initialize chart for the schedule
                     initializeChartForSchedule(schedule);
-
-                    // Show success message
-                    const infoDiv = document.getElementById('cone-fire-info');
-
-                    // Calculate total firing time
-                    let totalTime = 0;
-                    schedule.forEach(seg => {
-                        const rampTime = Math.abs(seg.target - 20) / (seg.rate / 60); // Rough estimate in minutes
-                        totalTime += rampTime + seg.hold;
-                    });
-
-                    infoDiv.style.display = 'block';
-                    infoDiv.innerHTML = `
-                        <strong>✓ ${data.message}</strong><br>
-                        <div style="margin-top: 10px;">
-                            <strong>Schedule Details:</strong><br>
-                            • ${schedule.length} segments<br>
-                            • Estimated time: ${(totalTime / 60).toFixed(1)} hours<br>
-                            • Max temp: ${formatTemp(schedule[schedule.length-1].target, temperatureUnit)}${getTempUnit()}<br>
-                        </div>
-                        <div style="margin-top: 10px;">
-                            <strong>Segments:</strong><br>
-                            ${schedule.map((seg, i) =>
-                                `${i+1}. Ramp at ${formatTemp(seg.rate, temperatureUnit)}${getTempUnit()}/hr to ${formatTemp(seg.target, temperatureUnit)}${getTempUnit()}, hold ${seg.hold} min`
-                            ).join('<br>')}
-                        </div>
-                    `;
 
                     // Update the active schedule display
                     const scheduleName = `Cone ${cone} (${speed})`;
