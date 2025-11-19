@@ -54,7 +54,11 @@ DEFAULT_CONFIG = {
         "relay_cycle_time": 10.0,
         "temp_update_interval": 2.0,
         "temperature_unit": "C",
-        "segment_temp_tolerance": 5.0
+        "segment_temp_tolerance": 5.0,
+        "kiln_sitter_mode": False,
+        "kiln_sitter_detection_threshold": 10.0,
+        "kiln_sitter_temp_drop_threshold": 5.0,
+        "kiln_sitter_check_window": 3
     },
     "web": {
         "host": "0.0.0.0",
@@ -172,6 +176,14 @@ class KilnController:
         self.temperature_unit = control_config.get('temperature_unit', 'C')
         self.segment_temp_tolerance = control_config.get('segment_temp_tolerance', 5.0)
 
+        # Kiln sitter parameters
+        self.kiln_sitter_mode = control_config.get('kiln_sitter_mode', False)
+        self.kiln_sitter_detection_threshold = control_config.get('kiln_sitter_detection_threshold', 10.0)
+        self.kiln_sitter_temp_drop_threshold = control_config.get('kiln_sitter_temp_drop_threshold', 5.0)
+        self.kiln_sitter_check_window = control_config.get('kiln_sitter_check_window', 3)
+        self.kiln_sitter_triggered = False
+        self.recent_temps = []  # Track recent temperatures for kiln sitter detection
+
         # PID controller setup
         self.pid = PID(
             pid_config['kp'],
@@ -201,6 +213,12 @@ class KilnController:
         # Pyrometric cone tracking
         self.cone_calculator = ConeCalculator()
         self.current_cone = None
+
+        # Firing summary tracking
+        self.peak_temp = None
+        self.peak_temp_time = None
+        self.peak_cone = None
+        self.firing_summary = None
 
         # Current state for web interface
         self.current_temp = None
@@ -326,20 +344,59 @@ class KilnController:
         if current_temp is None:
             logging.error("Invalid temperature reading - EMERGENCY STOP")
             return False
-        
+
         if current_temp > self.max_temp + self.safety_margin:
             logging.error(f"Temperature {current_temp}°C exceeds safe limit - EMERGENCY STOP")
             return False
-        
+
         # Check for thermocouple faults
         fault_dict = self.thermocouple.fault
-        for fault_type in ['cj_range', 'tc_range', 'cj_high', 'cj_low', 
+        for fault_type in ['cj_range', 'tc_range', 'cj_high', 'cj_low',
                           'tc_high', 'tc_low', 'voltage', 'open_tc']:
             if fault_dict.get(fault_type, False):
                 logging.error(f"Thermocouple fault: {fault_type} - EMERGENCY STOP")
                 return False
-        
+
         return True
+
+    def check_kiln_sitter_shutdown(self, current_temp, control_output):
+        """
+        Check if the kiln sitter has shut off the kiln
+        Returns True if kiln sitter shutdown is detected
+
+        Detection logic:
+        - Relay is trying to heat (control_output > threshold)
+        - Temperature is falling despite relay being on
+        - Temperature has dropped by more than threshold over recent window
+        """
+        if not self.kiln_sitter_mode:
+            return False
+
+        # Add current temperature to recent temps
+        self.recent_temps.append(current_temp)
+
+        # Keep only the last N temperatures based on check window
+        if len(self.recent_temps) > self.kiln_sitter_check_window:
+            self.recent_temps.pop(0)
+
+        # Need enough data points to detect trend
+        if len(self.recent_temps) < self.kiln_sitter_check_window:
+            return False
+
+        # Check if relay is trying to heat (output > detection threshold)
+        if control_output < self.kiln_sitter_detection_threshold:
+            return False
+
+        # Check if temperature is falling
+        temp_start = self.recent_temps[0]
+        temp_end = self.recent_temps[-1]
+        temp_drop = temp_start - temp_end
+
+        if temp_drop > self.kiln_sitter_temp_drop_threshold:
+            logging.warning(f"Kiln sitter shutdown detected: temp dropped {temp_drop:.1f}°C while output was {control_output:.1f}%")
+            return True
+
+        return False
     
     def control_relay(self, duty_cycle):
         """
@@ -518,6 +575,47 @@ class KilnController:
 
         logging.info(f"Generated cone {cone_number} schedule ({speed} speed) with {len(schedule)} segments")
         return schedule
+    
+    def calculate_firing_summary(self):
+        """
+        Calculate and store firing summary with peak temperature, cone, and rate
+        """
+        if not self.data_log or not self.start_time:
+            logging.warning("Cannot calculate firing summary: insufficient data")
+            return None
+
+        # Find peak temperature from data log
+        peak_entry = max(self.data_log, key=lambda x: x['temp'])
+        peak_temp = peak_entry['temp']
+        peak_time = peak_entry['elapsed']
+        peak_cone = peak_entry.get('cone', 'Unknown')
+
+        # Calculate average firing rate (degrees per hour)
+        if self.data_log and len(self.data_log) > 1:
+            start_temp = self.data_log[0]['temp']
+            total_time_hours = peak_time / 3600.0
+            avg_rate = (peak_temp - start_temp) / total_time_hours if total_time_hours > 0 else 0
+        else:
+            avg_rate = 0
+
+        # Create summary
+        summary = {
+            'schedule_name': self.current_schedule_name,
+            'start_time': datetime.fromtimestamp(self.start_time).isoformat(),
+            'end_time': datetime.now().isoformat(),
+            'duration_hours': (time.time() - self.start_time) / 3600.0,
+            'peak_temp': peak_temp,
+            'peak_temp_time_hours': peak_time / 3600.0,
+            'peak_cone': peak_cone,
+            'average_rate': avg_rate,
+            'kiln_sitter_triggered': self.kiln_sitter_triggered,
+            'total_data_points': len(self.data_log),
+            'schedule': self.schedule
+        }
+
+        self.firing_summary = summary
+        logging.info(f"Firing summary: Peak={peak_temp:.1f}°C, Cone={peak_cone}, Rate={avg_rate:.1f}°C/hr")
+        return summary
 
     def calculate_setpoint(self, current_temp, elapsed_time):
         """
@@ -595,10 +693,20 @@ class KilnController:
             self.cone_calculator.reset()
             self.current_cone = None
 
+            # Reset kiln sitter and firing summary tracking
+            self.kiln_sitter_triggered = False
+            self.recent_temps = []
+            self.peak_temp = initial_temp
+            self.peak_temp_time = 0
+            self.peak_cone = None
+            self.firing_summary = None
+
             logging.info("Starting firing cycle")
             logging.info(f"Schedule loaded with {len(self.schedule)} segments")
             logging.info(f"Schedule: {self.schedule}")
             logging.info(f"Initial temperature: {self.segment_start_temp:.1f}°C")
+            if self.kiln_sitter_mode:
+                logging.info("Kiln sitter mode ENABLED")
         else:
             # Resuming - preserve existing state, only set firing_active
             self.firing_active = True
@@ -654,6 +762,19 @@ class KilnController:
                 self.current_cone = self.cone_calculator.get_current_cone()
                 cone_lower, cone_upper, cone_fraction = self.cone_calculator.estimate_cone_between()
 
+                # Track peak temperature
+                if self.peak_temp is None or current_temp > self.peak_temp:
+                    self.peak_temp = current_temp
+                    self.peak_temp_time = time.time() - self.start_time
+                    self.peak_cone = self.current_cone
+
+                # Check for kiln sitter shutdown
+                if self.check_kiln_sitter_shutdown(current_temp, control_output):
+                    self.kiln_sitter_triggered = True
+                    logging.info("Kiln sitter shutdown detected - ending firing")
+                    self.firing_active = False
+                    break
+
                 # Update state for web interface
                 with self.state_lock:
                     self.current_setpoint = setpoint
@@ -696,6 +817,12 @@ class KilnController:
             logging.info("Firing interrupted by user")
         finally:
             self.relay.value = False
+
+            # Calculate firing summary and save to history
+            if self.data_log:
+                self.calculate_firing_summary()
+                self.save_firing_to_history()
+
             self.save_data_log()
             self.clear_firing_state()  # Clear state after successful completion or stop
             logging.info("Kiln powered off")
@@ -708,6 +835,40 @@ class KilnController:
             logging.info(f"Data log saved to {filename}")
         except Exception as e:
             logging.error(f"Failed to save data log: {e}")
+
+    def save_firing_to_history(self):
+        """
+        Save completed firing data to history directory with summary
+        Creates a timestamped file in the firings directory
+        """
+        try:
+            # Create firings directory if it doesn't exist
+            os.makedirs('firings', exist_ok=True)
+
+            # Generate timestamp-based filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            schedule_name = self.current_schedule_name or 'unknown'
+            filename = f"firings/{timestamp}_{schedule_name}.json"
+
+            # Calculate firing summary if not already done
+            if not self.firing_summary:
+                self.calculate_firing_summary()
+
+            # Create complete firing record
+            firing_record = {
+                'summary': self.firing_summary,
+                'data_log': self.data_log
+            }
+
+            # Save to file
+            with open(filename, 'w') as f:
+                json.dump(firing_record, f, indent=2)
+
+            logging.info(f"Firing data saved to history: {filename}")
+            return filename
+        except Exception as e:
+            logging.error(f"Failed to save firing to history: {e}")
+            return None
 
     def load_data_log(self, filename='kiln_data.json'):
         """Load firing data from file (for crash recovery)"""
@@ -831,7 +992,12 @@ class KilnController:
                 'cone_lower': cone_lower,
                 'cone_upper': cone_upper,
                 'cone_fraction': cone_fraction,
-                'heat_work': self.cone_calculator.heat_work
+                'heat_work': self.cone_calculator.heat_work,
+                'kiln_sitter_mode': self.kiln_sitter_mode,
+                'kiln_sitter_triggered': self.kiln_sitter_triggered,
+                'peak_temp': self.peak_temp,
+                'peak_cone': self.peak_cone,
+                'firing_summary': self.firing_summary
             }
     
     def set_pid_tunings(self, kp, ki, kd):
@@ -1525,6 +1691,101 @@ def get_cone_info(cone_name):
     if cone_info:
         return jsonify(cone_info)
     return jsonify({'error': f'Cone {cone_name} not found'}), 404
+
+@app.route('/api/firings', methods=['GET'])
+def list_firings():
+    """List all past firing records"""
+    try:
+        os.makedirs('firings', exist_ok=True)
+        firings = []
+
+        for filename in sorted(os.listdir('firings'), reverse=True):  # Most recent first
+            if filename.endswith('.json'):
+                filepath = f"firings/{filename}"
+                try:
+                    with open(filepath, 'r') as f:
+                        firing_data = json.load(f)
+
+                    # Extract summary for list view
+                    summary = firing_data.get('summary', {})
+                    firings.append({
+                        'filename': filename,
+                        'schedule_name': summary.get('schedule_name', 'Unknown'),
+                        'start_time': summary.get('start_time'),
+                        'end_time': summary.get('end_time'),
+                        'duration_hours': summary.get('duration_hours', 0),
+                        'peak_temp': summary.get('peak_temp', 0),
+                        'peak_cone': summary.get('peak_cone', 'Unknown'),
+                        'average_rate': summary.get('average_rate', 0),
+                        'kiln_sitter_triggered': summary.get('kiln_sitter_triggered', False)
+                    })
+                except Exception as e:
+                    logging.error(f"Failed to read firing {filename}: {e}")
+
+        return jsonify(firings)
+    except Exception as e:
+        logging.error(f"Failed to list firings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/firings/<filename>', methods=['GET'])
+def get_firing_detail(filename):
+    """Get detailed data for a specific firing"""
+    try:
+        # Security: prevent directory traversal
+        if '..' in filename or '/' in filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+
+        filepath = f"firings/{filename}"
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Firing not found'}), 404
+
+        with open(filepath, 'r') as f:
+            firing_data = json.load(f)
+
+        return jsonify(firing_data)
+    except Exception as e:
+        logging.error(f"Failed to retrieve firing {filename}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/config/kiln-sitter', methods=['GET', 'POST'])
+def handle_kiln_sitter_config():
+    """Get or update kiln sitter configuration"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    if request.method == 'GET':
+        return jsonify({
+            'kiln_sitter_mode': kiln.kiln_sitter_mode,
+            'kiln_sitter_detection_threshold': kiln.kiln_sitter_detection_threshold,
+            'kiln_sitter_temp_drop_threshold': kiln.kiln_sitter_temp_drop_threshold,
+            'kiln_sitter_check_window': kiln.kiln_sitter_check_window
+        })
+
+    elif request.method == 'POST':
+        data = request.json
+        try:
+            # Update kiln sitter settings
+            kiln.kiln_sitter_mode = data.get('kiln_sitter_mode', kiln.kiln_sitter_mode)
+            kiln.kiln_sitter_detection_threshold = float(data.get('kiln_sitter_detection_threshold', kiln.kiln_sitter_detection_threshold))
+            kiln.kiln_sitter_temp_drop_threshold = float(data.get('kiln_sitter_temp_drop_threshold', kiln.kiln_sitter_temp_drop_threshold))
+            kiln.kiln_sitter_check_window = int(data.get('kiln_sitter_check_window', kiln.kiln_sitter_check_window))
+
+            # Update config
+            if 'control' not in kiln.config:
+                kiln.config['control'] = {}
+            kiln.config['control']['kiln_sitter_mode'] = kiln.kiln_sitter_mode
+            kiln.config['control']['kiln_sitter_detection_threshold'] = kiln.kiln_sitter_detection_threshold
+            kiln.config['control']['kiln_sitter_temp_drop_threshold'] = kiln.kiln_sitter_temp_drop_threshold
+            kiln.config['control']['kiln_sitter_check_window'] = kiln.kiln_sitter_check_window
+
+            # Save to config file
+            save_config(kiln.config)
+
+            logging.info(f"Kiln sitter settings updated: mode={kiln.kiln_sitter_mode}")
+            return jsonify({'success': True, 'message': 'Kiln sitter settings updated'})
+        except Exception as e:
+            logging.error(f"Failed to update kiln sitter settings: {e}")
+            return jsonify({'error': str(e)}), 500
 
 def start_web_server(port=5000, host='0.0.0.0'):
     """Start the Flask web server"""
