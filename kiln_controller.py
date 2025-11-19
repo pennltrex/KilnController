@@ -435,7 +435,90 @@ class KilnController:
         except Exception as e:
             logging.error(f"Failed to delete schedule: {e}")
             return False
-    
+
+    def generate_cone_fire_schedule(self, cone_number, speed='medium', preheat_hours=0, hold_minutes=0):
+        """
+        Generate a cone fire schedule based on Orton standards.
+
+        Args:
+            cone_number: Cone number (e.g., '06', '6', '10')
+            speed: Firing speed - 'slow', 'medium', or 'fast'
+            preheat_hours: Optional preheat/candling time in hours at low temperature
+            hold_minutes: Optional hold time at peak temperature in minutes
+
+        Returns:
+            List of schedule segments or None if cone not found
+        """
+        from pyrometric_cones import ORTON_CONES
+
+        # Validate cone number
+        if cone_number not in ORTON_CONES:
+            logging.error(f"Invalid cone number: {cone_number}")
+            return None
+
+        # Get target temperature for the cone
+        target_temp_c = ORTON_CONES[cone_number]
+
+        # Define ramp rates for different speeds (in °C/hour)
+        # Based on industry standards:
+        # - Slow: 44°C/hr (80°F/hr) final ramp
+        # - Medium: 67°C/hr (120°F/hr) final ramp - closest to Orton standard 60°C/hr
+        # - Fast: 111°C/hr (200°F/hr) final ramp
+        speed_rates = {
+            'slow': {'water_smoking': 28, 'mid_ramp': 56, 'final_ramp': 44},      # Conservative for delicate work
+            'medium': {'water_smoking': 44, 'mid_ramp': 111, 'final_ramp': 67},   # Standard Orton-compatible
+            'fast': {'water_smoking': 56, 'mid_ramp': 167, 'final_ramp': 111}     # Quick firing
+        }
+
+        if speed not in speed_rates:
+            logging.error(f"Invalid speed: {speed}. Must be 'slow', 'medium', or 'fast'")
+            return None
+
+        rates = speed_rates[speed]
+
+        # Build the schedule
+        schedule = []
+
+        # Optional preheat/candling segment (very low temperature for water smoking and burnout)
+        if preheat_hours > 0:
+            preheat_temp = 95  # °C (about 200°F) - low temp for candling
+            schedule.append({
+                "rate": rates['water_smoking'],
+                "target": preheat_temp,
+                "hold": int(preheat_hours * 60)  # Convert hours to minutes
+            })
+
+        # Segment 1: Water smoking phase - slow ramp to 121°C (250°F)
+        # This allows moisture to escape without cracking
+        water_smoking_temp = 121  # °C
+        schedule.append({
+            "rate": rates['water_smoking'],
+            "target": water_smoking_temp,
+            "hold": 0
+        })
+
+        # Segment 2: Mid-fire ramp to 538°C (1000°F)
+        # Faster heating through the middle range
+        mid_temp = 538  # °C
+        if target_temp_c > mid_temp:
+            schedule.append({
+                "rate": rates['mid_ramp'],
+                "target": mid_temp,
+                "hold": 0
+            })
+
+        # Segment 3: Final ramp to cone temperature
+        # This is the critical segment that determines cone accuracy
+        # Rate matches the Orton cone calibration standards
+        schedule.append({
+            "rate": rates['final_ramp'],
+            "target": target_temp_c,
+            "hold": hold_minutes
+        })
+
+        logging.info(f"Generated cone {cone_number} schedule ({speed} speed) with {len(schedule)} segments")
+        return schedule
+
     def calculate_setpoint(self, current_temp, elapsed_time):
         """
         Calculate current setpoint based on firing schedule
@@ -998,6 +1081,67 @@ def handle_schedule():
         return jsonify({'success': True})
     else:
         return jsonify(kiln.schedule)
+
+@app.route('/api/cone-fire', methods=['POST'])
+def cone_fire():
+    """Generate and load a cone fire schedule"""
+    if not kiln:
+        return jsonify({'error': 'Kiln not initialized'}), 500
+
+    try:
+        data = request.json
+        cone_number = data.get('cone')
+        speed = data.get('speed', 'medium')
+        preheat_hours = float(data.get('preheat', 0))
+        hold_minutes = int(data.get('hold', 0))
+
+        # Validate inputs
+        if not cone_number:
+            return jsonify({'error': 'Cone number is required'}), 400
+
+        # Generate the schedule
+        schedule = kiln.generate_cone_fire_schedule(
+            cone_number=cone_number,
+            speed=speed,
+            preheat_hours=preheat_hours,
+            hold_minutes=hold_minutes
+        )
+
+        if schedule is None:
+            return jsonify({'error': f'Invalid cone number: {cone_number}'}), 400
+
+        # Load the generated schedule
+        kiln.schedule = schedule
+        kiln.current_schedule_name = f'Cone {cone_number} ({speed})'
+
+        logging.info(f"Cone fire mode: Cone {cone_number}, {speed} speed, "
+                    f"preheat: {preheat_hours}h, hold: {hold_minutes}min")
+
+        return jsonify({
+            'success': True,
+            'message': f'Cone {cone_number} schedule loaded ({speed} speed)',
+            'schedule': schedule
+        })
+
+    except Exception as e:
+        logging.error(f"Cone fire error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cones', methods=['GET'])
+def get_cones():
+    """Get list of available cones"""
+    from pyrometric_cones import ORTON_CONES
+
+    cones = []
+    for cone_name in sorted(ORTON_CONES.keys(), key=lambda x: ORTON_CONES[x]):
+        temp_c = ORTON_CONES[cone_name]
+        cones.append({
+            'name': cone_name,
+            'temperature_c': temp_c,
+            'temperature_f': int(temp_c * 9/5 + 32)
+        })
+
+    return jsonify(cones)
 
 @app.route('/api/start', methods=['POST'])
 def start_firing():
