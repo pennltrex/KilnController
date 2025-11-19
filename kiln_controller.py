@@ -1293,22 +1293,6 @@ def cone_fire():
         logging.error(f"Cone fire error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/cones', methods=['GET'])
-def get_cones():
-    """Get list of available cones"""
-    from pyrometric_cones import ORTON_CONES
-
-    cones = []
-    for cone_name in sorted(ORTON_CONES.keys(), key=lambda x: ORTON_CONES[x]):
-        temp_c = ORTON_CONES[cone_name]
-        cones.append({
-            'name': cone_name,
-            'temperature_c': temp_c,
-            'temperature_f': int(temp_c * 9/5 + 32)
-        })
-
-    return jsonify(cones)
-
 @app.route('/api/start', methods=['POST'])
 def start_firing():
     """Start a firing cycle"""
