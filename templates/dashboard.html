@@ -3005,7 +3005,7 @@
                     <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
                         <thead style="position: sticky; top: 0; background: #f8f9fa; z-index: 1;">
                             <tr style="border-bottom: 2px solid #dee2e6;">
-                                <th style="padding: 10px; text-align: left; font-weight: 600;">Time (hours)</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">Time</th>
                                 <th style="padding: 10px; text-align: right; font-weight: 600;">Temperature (°C)</th>
                                 <th style="padding: 10px; text-align: right; font-weight: 600;">Setpoint (°C)</th>
                             </tr>
@@ -3014,11 +3014,17 @@
                 `;
 
                 dataLog.forEach((entry, index) => {
-                    const hours = (entry.elapsed / 3600).toFixed(2);
+                    // Format time as hours:minutes:seconds
+                    const totalSeconds = Math.floor(entry.elapsed);
+                    const hours = Math.floor(totalSeconds / 3600);
+                    const minutes = Math.floor((totalSeconds % 3600) / 60);
+                    const seconds = totalSeconds % 60;
+                    const timeStr = `${hours}h ${minutes}m ${seconds}s`;
+
                     const rowStyle = index % 2 === 0 ? 'background: #f8f9fa;' : '';
                     tableHtml += `
                         <tr style="${rowStyle}">
-                            <td style="padding: 8px; border-bottom: 1px solid #eee;">${hours}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #eee;">${timeStr}</td>
                             <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">${entry.temp.toFixed(1)}</td>
                             <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">${entry.setpoint.toFixed(1)}</td>
                         </tr>
