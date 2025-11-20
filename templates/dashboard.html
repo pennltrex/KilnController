@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kiln Controller Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script>
+        // Verify zoom plugin is loaded
+        console.log('Chart.js version:', Chart.version);
+        console.log('Zoom plugin available:', typeof Chart !== 'undefined' && Chart.registry && Chart.registry.plugins.get('zoom'));
+    </script>
     <style>
         * {
             margin: 0;
@@ -691,6 +698,27 @@
 
                 <div class="card chart-card">
                     <h2>Temperature History</h2>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
+                        <button class="btn-secondary btn-small" onclick="resetChartZoom()" title="Reset to full view">
+                            Reset Zoom
+                        </button>
+                        <button class="btn-secondary btn-small" onclick="zoomChartIn()" title="Zoom in">
+                            Zoom In
+                        </button>
+                        <button class="btn-secondary btn-small" onclick="zoomChartOut()" title="Zoom out">
+                            Zoom Out
+                        </button>
+                        <div style="border-left: 2px solid #ddd; height: 30px; margin: 0 5px;"></div>
+                        <button class="btn-secondary btn-small" onclick="zoomToPreset(15)" title="Zoom to last 15 minutes">
+                            Last 15 Min
+                        </button>
+                        <button class="btn-secondary btn-small" onclick="zoomToPreset(60)" title="Zoom to last hour">
+                            Last Hour
+                        </button>
+                        <button class="btn-secondary btn-small" onclick="zoomToPreset(null)" title="Show full firing">
+                            Full View
+                        </button>
+                    </div>
                     <div class="chart-container">
                         <canvas id="tempChart"></canvas>
                     </div>
@@ -721,6 +749,18 @@
 
                     <div id="firing-summary" style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
                         <!-- Summary will be populated dynamically -->
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
+                        <button class="btn-secondary btn-small" onclick="resetHistoryZoom()" title="Reset to full view">
+                            Reset Zoom
+                        </button>
+                        <button class="btn-secondary btn-small" onclick="zoomHistoryIn()" title="Zoom in">
+                            Zoom In
+                        </button>
+                        <button class="btn-secondary btn-small" onclick="zoomHistoryOut()" title="Zoom out">
+                            Zoom Out
+                        </button>
                     </div>
 
                     <div class="chart-container" style="margin-bottom: 20px;">
@@ -913,6 +953,39 @@
                             How often the temperature history graph updates with new data points
                         </p>
                     </div>
+
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label>Zoom Behavior:</label>
+                        <select id="zoom-mode-select" style="width: 100%; margin-top: 8px;">
+                            <option value="x">Time Axis Only (Recommended)</option>
+                            <option value="xy">Both Time and Temperature</option>
+                            <option value="y">Temperature Only</option>
+                        </select>
+                        <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                            Controls which axes are affected when zooming with mouse wheel or drag
+                        </p>
+                    </div>
+
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="zoom-wheel-enabled" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span>Enable Mouse Wheel Zoom</span>
+                        </label>
+                        <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                            Scroll mouse wheel over graph to zoom in/out
+                        </p>
+                    </div>
+
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="zoom-drag-enabled" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span>Enable Drag-to-Zoom</span>
+                        </label>
+                        <p style="color: #999; font-size: 0.8em; margin-top: 5px;">
+                            Click and drag on graph to select area to zoom into
+                        </p>
+                    </div>
+
                     <button class="btn-primary" onclick="updateDisplaySettings()" style="width: 100%;">
                         Apply Display Settings
                     </button>
@@ -1068,6 +1141,36 @@
                     legend: {
                         display: true,
                         position: 'top'
+                    },
+                    zoom: {
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                                speed: 0.1
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            drag: {
+                                enabled: true,
+                                backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                                borderColor: 'rgb(102, 126, 234)',
+                                borderWidth: 1,
+                                modifierKey: null
+                            },
+                            mode: 'x'
+                        },
+                        pan: {
+                            enabled: true,
+                            mode: 'x',
+                            modifierKey: null
+                        },
+                        limits: {
+                            x: {
+                                min: 'original',
+                                max: 'original'
+                            }
+                        }
                     }
                 },
                 scales: {
@@ -1386,8 +1489,27 @@
         async function updateDisplaySettings() {
             const graphUpdate = parseFloat(document.getElementById('graph-update-slider').value);
             const tempUnit = document.getElementById('temperature-unit-select').value;
+            const zoomMode = document.getElementById('zoom-mode-select').value;
+            const zoomWheelEnabled = document.getElementById('zoom-wheel-enabled').checked;
+            const zoomDragEnabled = document.getElementById('zoom-drag-enabled').checked;
 
             graphUpdateInterval = graphUpdate;
+
+            // Update zoom settings for main chart
+            chart.options.plugins.zoom.zoom.mode = zoomMode;
+            chart.options.plugins.zoom.pan.mode = zoomMode;
+            chart.options.plugins.zoom.zoom.wheel.enabled = zoomWheelEnabled;
+            chart.options.plugins.zoom.zoom.drag.enabled = zoomDragEnabled;
+            chart.update('none');
+
+            // Update zoom settings for firing history chart if it exists
+            if (firingHistoryChart) {
+                firingHistoryChart.options.plugins.zoom.zoom.mode = zoomMode;
+                firingHistoryChart.options.plugins.zoom.pan.mode = zoomMode;
+                firingHistoryChart.options.plugins.zoom.zoom.wheel.enabled = zoomWheelEnabled;
+                firingHistoryChart.options.plugins.zoom.zoom.drag.enabled = zoomDragEnabled;
+                firingHistoryChart.update('none');
+            }
 
             // Save temperature unit to backend
             try {
@@ -1395,7 +1517,10 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        temperature_unit: tempUnit
+                        temperature_unit: tempUnit,
+                        zoom_mode: zoomMode,
+                        zoom_wheel_enabled: zoomWheelEnabled,
+                        zoom_drag_enabled: zoomDragEnabled
                     })
                 });
 
@@ -1422,6 +1547,67 @@
             // Update chart axis label
             chart.options.scales.y.title.text = getTempLabel();
             chart.update('none');
+        }
+
+        function resetChartZoom() {
+            chart.resetZoom();
+        }
+
+        function zoomChartIn() {
+            chart.zoom(1.2);
+        }
+
+        function zoomChartOut() {
+            chart.zoom(0.8);
+        }
+
+        function resetHistoryZoom() {
+            if (firingHistoryChart) {
+                firingHistoryChart.resetZoom();
+            }
+        }
+
+        function zoomHistoryIn() {
+            if (firingHistoryChart) {
+                firingHistoryChart.zoom(1.2);
+            }
+        }
+
+        function zoomHistoryOut() {
+            if (firingHistoryChart) {
+                firingHistoryChart.zoom(0.8);
+            }
+        }
+
+        function zoomToPreset(minutes) {
+            if (minutes === null) {
+                // Full view - reset zoom
+                chart.resetZoom();
+                return;
+            }
+
+            // Get the current data labels (time points)
+            const labels = chart.data.labels;
+            if (!labels || labels.length === 0) {
+                showAlert('No data available to zoom', 'error');
+                return;
+            }
+
+            // Calculate the index range for the preset time window
+            const totalLabels = labels.length;
+            const targetMinutes = minutes;
+
+            // Estimate how many data points represent the target time window
+            // Assuming data points are added at graphUpdateInterval frequency
+            const pointsPerMinute = 60 / graphUpdateInterval;
+            const targetPoints = Math.ceil(targetMinutes * pointsPerMinute);
+
+            // Calculate the start index (zoom to the most recent data)
+            const startIdx = Math.max(0, totalLabels - targetPoints);
+            const endIdx = totalLabels - 1;
+
+            // Apply zoom to the calculated range
+            chart.zoomScale('x', {min: startIdx, max: endIdx}, 'default');
         }
 
         // Calibration points management
@@ -1557,6 +1743,21 @@
                     document.getElementById('temperature-unit-select').value = temperatureUnit;
                     updateTemperatureDisplays();
                 }
+
+                // Load zoom settings if available
+                if (displayConfig.zoom_mode) {
+                    document.getElementById('zoom-mode-select').value = displayConfig.zoom_mode;
+                    chart.options.plugins.zoom.zoom.mode = displayConfig.zoom_mode;
+                    chart.options.plugins.zoom.pan.mode = displayConfig.zoom_mode;
+                }
+                if (displayConfig.zoom_wheel_enabled !== undefined) {
+                    document.getElementById('zoom-wheel-enabled').checked = displayConfig.zoom_wheel_enabled;
+                    chart.options.plugins.zoom.zoom.wheel.enabled = displayConfig.zoom_wheel_enabled;
+                }
+                if (displayConfig.zoom_drag_enabled !== undefined) {
+                    document.getElementById('zoom-drag-enabled').checked = displayConfig.zoom_drag_enabled;
+                    chart.options.plugins.zoom.zoom.drag.enabled = displayConfig.zoom_drag_enabled;
+                }
             } catch (error) {
                 console.error('Failed to load display settings:', error);
             }
@@ -1606,6 +1807,21 @@
                     temperatureUnit = config.display.temperature_unit || 'C';
                     document.getElementById('temperature-unit-select').value = temperatureUnit;
                     updateTemperatureDisplays();
+
+                    // Load zoom settings
+                    if (config.display.zoom_mode) {
+                        document.getElementById('zoom-mode-select').value = config.display.zoom_mode;
+                        chart.options.plugins.zoom.zoom.mode = config.display.zoom_mode;
+                        chart.options.plugins.zoom.pan.mode = config.display.zoom_mode;
+                    }
+                    if (config.display.zoom_wheel_enabled !== undefined) {
+                        document.getElementById('zoom-wheel-enabled').checked = config.display.zoom_wheel_enabled;
+                        chart.options.plugins.zoom.zoom.wheel.enabled = config.display.zoom_wheel_enabled;
+                    }
+                    if (config.display.zoom_drag_enabled !== undefined) {
+                        document.getElementById('zoom-drag-enabled').checked = config.display.zoom_drag_enabled;
+                        chart.options.plugins.zoom.zoom.drag.enabled = config.display.zoom_drag_enabled;
+                    }
                 }
 
                 // Load hardware settings (read-only)
@@ -2734,6 +2950,38 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        plugins: {
+                            zoom: {
+                                zoom: {
+                                    wheel: {
+                                        enabled: true,
+                                        speed: 0.1
+                                    },
+                                    pinch: {
+                                        enabled: true
+                                    },
+                                    drag: {
+                                        enabled: true,
+                                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                                        borderColor: 'rgb(102, 126, 234)',
+                                        borderWidth: 1,
+                                        modifierKey: null
+                                    },
+                                    mode: 'x'
+                                },
+                                pan: {
+                                    enabled: true,
+                                    mode: 'x',
+                                    modifierKey: null
+                                },
+                                limits: {
+                                    x: {
+                                        min: 'original',
+                                        max: 'original'
+                                    }
+                                }
+                            }
+                        },
                         scales: {
                             x: {
                                 title: {

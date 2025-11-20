@@ -1475,10 +1475,17 @@ def handle_display_settings():
     elif request.method == 'POST':
         data = request.json
         temperature_unit = data.get('temperature_unit', 'C')
+        zoom_mode = data.get('zoom_mode', 'x')
+        zoom_wheel_enabled = data.get('zoom_wheel_enabled', True)
+        zoom_drag_enabled = data.get('zoom_drag_enabled', True)
 
         # Validate temperature unit
         if temperature_unit not in ['C', 'F']:
             return jsonify({'error': 'Invalid temperature unit. Must be C or F'}), 400
+
+        # Validate zoom mode
+        if zoom_mode not in ['x', 'y', 'xy']:
+            return jsonify({'error': 'Invalid zoom mode. Must be x, y, or xy'}), 400
 
         try:
             # Ensure display config exists
@@ -1487,11 +1494,14 @@ def handle_display_settings():
 
             # Update config
             kiln.config['display']['temperature_unit'] = temperature_unit
+            kiln.config['display']['zoom_mode'] = zoom_mode
+            kiln.config['display']['zoom_wheel_enabled'] = zoom_wheel_enabled
+            kiln.config['display']['zoom_drag_enabled'] = zoom_drag_enabled
 
             # Save to config file
             save_config(kiln.config)
 
-            logging.info(f"Display settings updated: temperature_unit={temperature_unit}")
+            logging.info(f"Display settings updated: temperature_unit={temperature_unit}, zoom_mode={zoom_mode}, zoom_wheel={zoom_wheel_enabled}, zoom_drag={zoom_drag_enabled}")
             return jsonify({'success': True, 'message': 'Display settings updated'})
         except Exception as e:
             logging.error(f"Failed to update display settings: {e}")
